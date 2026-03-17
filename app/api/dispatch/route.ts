@@ -116,10 +116,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Build the callback URL
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
-    const callbackUrl = `${baseUrl}/tasks/callback`;
+    // Build the callback URL from the current request origin
+    const callbackUrl = new URL("/api/tasks/callback", request.nextUrl.origin).toString();
 
     try {
       // Call the agent

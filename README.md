@@ -5,12 +5,26 @@
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-required-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-f4c430)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=DATABASE_URL,JWT_SECRET,AGENT_API_KEY,NEXT_PUBLIC_API_URL,NEXT_PUBLIC_AGENT_API_KEY,AGENT_TIMEOUT,AGENT_HEARTBEAT_INTERVAL)
 [中文文档](README_zh.md)
 
 `rauto-manager` is a self-hosted control plane for fleets of `rauto` agents. It adds a central web UI for agent registration, device inventory, task dispatch, execution history, notifications, and administrator access.
 
 > Current implementation already includes admin setup/login, PostgreSQL persistence, agent heartbeat and offline handling, device sync, task callbacks, SSE notifications, runtime metrics, and English/Chinese UI support.
+
+## Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=JWT_SECRET,AGENT_API_KEY&envLink=https://github.com/demohiiiii/rauto-manager/blob/main/.env.example&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%2C%22protocol%22%3A%22storage%22%7D%5D)
+
+The deploy flow creates a Vercel project and provisions a Neon Postgres database through the Neon integration.
+
+Neon setup requirements:
+
+- Install or select the `Neon` integration during the Vercel setup flow.
+- Let the integration inject `DATABASE_URL`; you do not need to enter it manually when creating a new Neon database from the deploy flow.
+- If you link an existing Neon database, set `DATABASE_URL` to the Neon Postgres connection string for that database.
+- Keep Prisma migrations committed under `prisma/migrations/` so `prisma migrate deploy` has something to apply.
+- Use separate Neon databases or branches for Production and Preview instead of pointing both environments at the same database.
+- You still need to enter `JWT_SECRET` and `AGENT_API_KEY` manually in the Vercel form.
 
 ## `rauto` vs `rauto-manager`
 
@@ -119,7 +133,6 @@ Required settings:
 
 Optional but useful:
 
-- `NEXT_PUBLIC_API_URL`: defaults to `http://localhost:3000/api`.
 - `NEXT_PUBLIC_AGENT_API_KEY`: if set, the UI can prefill the agent registration command with the same token.
 - `AGENT_TIMEOUT`: manager-side timeout for stale agents.
 - `AGENT_HEARTBEAT_INTERVAL`: manager-side heartbeat interval hint shown in settings.
@@ -153,9 +166,11 @@ Open [http://localhost:3000](http://localhost:3000). On first boot, `/login` red
 npx prisma migrate dev --name init
 ```
 
-2. Set `DATABASE_URL`, `JWT_SECRET`, and `AGENT_API_KEY` in the Vercel project environment variables.
+2. In the Vercel project, install or select the `Neon` integration so it can provide `DATABASE_URL`, then set `JWT_SECRET` and `AGENT_API_KEY`.
 
-3. Deploy normally. Vercel will run `npm run build:vercel`, which applies committed migrations with `prisma migrate deploy` before building the Next.js app.
+3. Use a dedicated Neon database or branch for each environment. Do not point Preview and Production at the same database.
+
+4. Deploy normally. Vercel will run `npm run build:vercel`, which applies committed migrations with `prisma migrate deploy` before building the Next.js app.
 
 Do not place migrations inside request handlers or Prisma client initialization. On Vercel, there is no single long-lived app startup lifecycle you can safely rely on for one-time schema changes.
 

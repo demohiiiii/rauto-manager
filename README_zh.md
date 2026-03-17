@@ -5,8 +5,22 @@
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-required-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-f4c430)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=DATABASE_URL,JWT_SECRET,AGENT_API_KEY,NEXT_PUBLIC_API_URL,NEXT_PUBLIC_AGENT_API_KEY,AGENT_TIMEOUT,AGENT_HEARTBEAT_INTERVAL)
 [English Documentation](README.md)
+
+## 部署
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=JWT_SECRET,AGENT_API_KEY&envLink=https://github.com/demohiiiii/rauto-manager/blob/main/.env.example&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%2C%22protocol%22%3A%22storage%22%7D%5D)
+
+这个部署入口会在 Vercel 创建项目，并通过 Neon integration 一起创建和绑定 Neon Postgres 数据库。
+
+Neon 配置需要确认：
+
+- 在 Vercel 创建项目的向导里安装或选择 `Neon` integration。
+- 如果是在部署向导里新建 Neon 数据库，`DATABASE_URL` 会由集成自动注入，不需要手填。
+- 如果你是绑定已有的 Neon 数据库，需要把 `DATABASE_URL` 设为对应数据库的 Neon Postgres 连接串。
+- 必须把 Prisma migration 文件提交到 `prisma/migrations/`，这样 `prisma migrate deploy` 才有可执行内容。
+- Production 和 Preview 应使用不同的 Neon 数据库或 branch，不要共用同一个库。
+- 在 Vercel 表单里仍然需要手动填写 `JWT_SECRET` 和 `AGENT_API_KEY`。
 
 `rauto-manager` 是一个面向 `rauto` Agent 集群的自托管控制平面。它补上了中心化 Web 管理界面，用来统一处理 Agent 注册、设备清单、任务下发、执行历史、通知告警和管理员登录。
 
@@ -119,7 +133,6 @@ cp .env.example .env
 
 建议补充：
 
-- `NEXT_PUBLIC_API_URL`：默认是 `http://localhost:3000/api`。
 - `NEXT_PUBLIC_AGENT_API_KEY`：如果设置，前端弹窗里可直接生成带 token 的 Agent 注册命令。
 - `AGENT_TIMEOUT`：Manager 侧判定 Agent 失活的超时时间。
 - `AGENT_HEARTBEAT_INTERVAL`：Manager 侧展示和配置使用的心跳间隔提示值。
