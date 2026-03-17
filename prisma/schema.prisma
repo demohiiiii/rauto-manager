@@ -1,0 +1,157 @@
+// Prisma Schema for Rauto Manager
+// 数据库持久化方案
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Agent {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  host          String
+  port          Int
+  status        String   @default("offline") // online, offline, error
+  lastHeartbeat DateTime @default(now())
+  capabilities  String[] @default([])
+  version       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 运行时指标（由 Agent 心跳上报）
+  connectionsCount  Int @default(0)
+  templatesCount    Int @default(0)
+  activeSessions    Int @default(0)
+  runningTasksCount Int @default(0)
+  uptimeSeconds     BigInt @default(0)
+
+  devices Device[]
+  tasks   Task[]
+
+  @@index([status])
+  @@index([lastHeartbeat])
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  agentId     String
+  name        String
+  type        String
+  host        String
+  port        Int?
+  status      String   @default("unknown") // reachable, unreachable, unknown
+  lastChecked DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([status])
+}
+
+model Task {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  agentIds     String[]
+  deviceIds    String[] @default([])
+  template     String   @default("")
+  variables    Json     @default("{}")
+  dispatchType String   @default("exec") // exec, template, tx_block, tx_workflow, orchestrate
+  payload      Json     @default("{}") // 完整的下发负载（type-specific）
+  status       String   @default("pending") // pending, running, success, failed, cancelled
+  result       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  agents Agent[]
+
+  executionHistory ExecutionHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ExecutionHistory {
+  id            String   @id @default(uuid())
+  taskId        String
+  agentId       String
+  deviceId      String?
+  command       String
+  output        String   @db.Text
+  status        String // success, failed
+  executionTime Int // milliseconds
+  createdAt     DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([agentId])
+  @@index([createdAt])
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String // bcrypt hashed password
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // agent_online, agent_offline, agent_timeout, device_report, task_dispatched, task_success, task_failed
+  title     String
+  message   String
+  level     String   @default("info") // info, warning, error, success
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([read])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AgentErrorReport {
+  id         String   @id @default(uuid())
+  eventId    String   @unique
+  agentName  String
+  category   String   // async_delivery, sync, runtime
+  kind       String   // task_callback_failed, device_inventory_sync_failed, etc.
+  severity   String   // warning, error
+  occurredAt DateTime
+  taskId     String?
+  operation  String?  // exec, template_execute, tx_block, tx_workflow, orchestrate
+  targetUrl  String?
+  httpMethod String?
+  httpStatus Int?
+  retryable  Boolean?
+  message    String   @db.Text
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([agentName])
+  @@index([taskId])
+  @@index([kind])
+  @@index([occurredAt])
+  @@index([severity])
+  @@index([category])
+}
+
