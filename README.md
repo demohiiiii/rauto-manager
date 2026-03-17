@@ -5,6 +5,7 @@
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-required-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-f4c430)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=DATABASE_URL,JWT_SECRET,AGENT_API_KEY,NEXT_PUBLIC_API_URL,NEXT_PUBLIC_AGENT_API_KEY,AGENT_TIMEOUT,AGENT_HEARTBEAT_INTERVAL)
 [中文文档](README_zh.md)
 
 `rauto-manager` is a self-hosted control plane for fleets of `rauto` agents. It adds a central web UI for agent registration, device inventory, task dispatch, execution history, notifications, and administrator access.
@@ -131,6 +132,11 @@ npx prisma migrate deploy
 
 For local schema iteration, `npx prisma migrate dev` also works.
 
+Important:
+
+- Commit generated files under `prisma/migrations/` before deploying so Vercel can apply them with `prisma migrate deploy`.
+- On Vercel, prefer running migrations during the deployment build instead of trying to migrate on application startup. This repository includes `vercel.json` and `npm run build:vercel`, which execute `prisma migrate deploy` before `next build`.
+
 ### 4. Start the app
 
 ```bash
@@ -138,6 +144,20 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). On first boot, `/login` redirects to `/setup`, where you create the initial admin account.
+
+## Deploying To Vercel
+
+1. If you change the Prisma schema locally, generate and commit a new migration:
+
+```bash
+npx prisma migrate dev --name init
+```
+
+2. Set `DATABASE_URL`, `JWT_SECRET`, and `AGENT_API_KEY` in the Vercel project environment variables.
+
+3. Deploy normally. Vercel will run `npm run build:vercel`, which applies committed migrations with `prisma migrate deploy` before building the Next.js app.
+
+Do not place migrations inside request handlers or Prisma client initialization. On Vercel, there is no single long-lived app startup lifecycle you can safely rely on for one-time schema changes.
 
 ## Connect a `rauto` Agent
 

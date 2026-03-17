@@ -5,6 +5,7 @@
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-required-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-f4c430)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/demohiiiii/rauto-manager&project-name=rauto-manager&repository-name=rauto-manager&env=DATABASE_URL,JWT_SECRET,AGENT_API_KEY,NEXT_PUBLIC_API_URL,NEXT_PUBLIC_AGENT_API_KEY,AGENT_TIMEOUT,AGENT_HEARTBEAT_INTERVAL)
 [English Documentation](README.md)
 
 `rauto-manager` 是一个面向 `rauto` Agent 集群的自托管控制平面。它补上了中心化 Web 管理界面，用来统一处理 Agent 注册、设备清单、任务下发、执行历史、通知告警和管理员登录。
