@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * 将 Prisma Agent 对象的 BigInt 字段转换为 Number，使其可被 JSON 序列化
+ * Convert Prisma Agent BigInt fields to Number so they can be JSON-serialized.
  */
 export function serializeAgent<T extends { uptimeSeconds: bigint }>(
   agent: T

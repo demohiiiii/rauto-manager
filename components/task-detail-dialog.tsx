@@ -84,7 +84,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-// 解析 recording JSONL 中的命令执行记录
+// Parse command execution records from recording JSONL
 interface RecordingEntry {
   ts_ms: number;
   event: {
@@ -111,7 +111,7 @@ function parseRecordingJsonl(jsonlStr: string): RecordingEntry[] {
   }
 }
 
-// 执行历史表格组件 - 展示 recording JSONL 中的命令
+// Execution history table component that renders commands from recording JSONL
 function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
   const t = useTranslations("dialogs");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -128,7 +128,7 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
     });
   };
 
-  // 解析所有执行历史中的 recording entries
+  // Parse recording entries from every execution history item
   const allEntries: Array<{
     id: string;
     entry: RecordingEntry;
@@ -150,7 +150,7 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
         });
       });
     } catch {
-      // 如果解析失败，跳过
+      // Skip entries that fail to parse
     }
   });
 
@@ -246,7 +246,7 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
                     </span>
                   </div>
 
-                  {/* 展开的输出区域 */}
+                  {/* Expanded output area */}
                   {isExpanded && hasOutput && (
                     <div className="px-3 pb-3 pt-1 bg-muted/20">
                       <div className="text-xs text-muted-foreground mb-1 font-medium">
@@ -296,7 +296,7 @@ export function TaskDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* 基本信息 */}
+          {/* Basic information */}
           <div className="space-y-1">
             <InfoRow label={t("taskDetailStatus")}>
               <Badge className={statusConfig.className}>
@@ -328,7 +328,7 @@ export function TaskDetailDialog({
 
           <Separator />
 
-          {/* Payload — 结构化展示 */}
+          {/* Payload - structured view */}
           <div className="space-y-2">
             <h4 className="text-sm font-medium">{t("taskDetailPayload")}</h4>
             <PayloadRenderer
@@ -339,7 +339,7 @@ export function TaskDetailDialog({
 
           <Separator />
 
-          {/* Result — 结构化展示 */}
+          {/* Result - structured view */}
           <div className="space-y-2">
             <h4 className="text-sm font-medium">{t("taskDetailResult")}</h4>
             <ResultRenderer
@@ -348,7 +348,7 @@ export function TaskDetailDialog({
             />
           </div>
 
-          {/* 执行历史 — 表格展示 */}
+          {/* Execution history - table view */}
           {task.executionHistory && task.executionHistory.length > 0 && (
             <>
               <Separator />

@@ -51,7 +51,7 @@ export function AppearanceCard() {
         throw new Error("Failed to update language");
       }
 
-      // 添加时间戳参数强制绕过缓存，然后硬刷新
+      // Append a timestamp to bypass cache and then force a hard refresh
       const url = new URL(window.location.href);
       url.searchParams.set("_t", Date.now().toString());
       window.location.href = url.toString();

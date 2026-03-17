@@ -24,14 +24,14 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 从环境变量或当前 URL 获取 Manager 地址
+  // Resolve the Manager URL from env vars or the current location
   const managerUrl = typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.host}`
     : "http://localhost:3000";
 
   const apiKey = process.env.NEXT_PUBLIC_AGENT_API_KEY || "rauto-agent-api-key-change-in-production";
 
-  // rauto 注册命令
+  // rauto registration command
   const registerCommand = `rauto agent \\
   --manager-url "${managerUrl}" \\
   --agent-name "my-agent" \\
@@ -65,7 +65,7 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* 配置信息 */}
+          {/* Configuration info */}
           <div className="space-y-2">
             <h4 className="text-sm font-medium">{t("managerConfig")}</h4>
             <div className="grid gap-2 text-sm">
@@ -82,7 +82,7 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
             </div>
           </div>
 
-          {/* 命令展示 */}
+          {/* Command preview */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">{t("registerCommand")}</h4>
@@ -112,7 +112,7 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
             </div>
           </div>
 
-          {/* 参数说明 */}
+          {/* Parameter notes */}
           <div className="space-y-2">
             <h4 className="text-sm font-medium">{t("parameterDescription")}</h4>
             <div className="space-y-2 text-xs text-muted-foreground">
@@ -131,7 +131,7 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
             </div>
           </div>
 
-          {/* 提示信息 */}
+          {/* Tips */}
           <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3">
             <div className="flex gap-2 text-sm">
               <Terminal className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
@@ -150,7 +150,7 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
             </div>
           </div>
 
-          {/* 文档链接 */}
+          {/* Documentation link */}
           <div className="flex items-center justify-between pt-2 border-t">
             <span className="text-xs text-muted-foreground">
               {t("needHelp")}

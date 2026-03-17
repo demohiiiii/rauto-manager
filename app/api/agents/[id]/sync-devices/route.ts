@@ -3,7 +3,7 @@ import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-const SYNC_TIMEOUT_MS = 30000; // 30 秒超时
+const SYNC_TIMEOUT_MS = 30000; // 30-second timeout
 
 export async function POST(
   request: NextRequest,
@@ -12,7 +12,7 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // 查找 Agent
+    // Look up the agent
     const agent = await prisma.agent.findUnique({
       where: { id },
     });
@@ -31,7 +31,7 @@ export async function POST(
       );
     }
 
-    // 调用 Agent 的设备探测接口
+    // Call the agent device probe endpoint
     const probeResponse = await fetch(
       `http://${agent.host}:${agent.port}/api/devices/probe`,
       {
@@ -66,19 +66,19 @@ export async function POST(
       metadata?: Prisma.InputJsonValue;
     }> = probeData.data ?? probeData.devices ?? [];
 
-    // 事务内全量同步设备
+    // Fully sync devices inside a transaction
     const syncedDevices = await prisma.$transaction(async (tx) => {
-      // 获取当前数据库中该 Agent 的所有设备
+      // Load all devices currently stored for this agent
       const existingDevices = await tx.device.findMany({
         where: { agentId: id },
       });
 
-      // 构建 remote 设备的唯一标识集合
+      // Build a set of unique identifiers for remote devices
       const remoteKeys = new Set(
         remoteDevices.map((d) => `${d.name}:${d.host}`)
       );
 
-      // 删除远端不存在的设备
+      // Delete devices that no longer exist remotely
       const toDelete = existingDevices.filter(
         (d) => !remoteKeys.has(`${d.name}:${d.host}`)
       );
@@ -88,7 +88,7 @@ export async function POST(
         });
       }
 
-      // Upsert 远端设备
+      // Upsert remote devices
       const results = [];
       for (const device of remoteDevices) {
         const existing = existingDevices.find(

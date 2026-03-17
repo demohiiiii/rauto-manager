@@ -5,10 +5,10 @@ const CONN_TIMEOUT_MS = 15000;
 
 /**
  * GET /api/agents/[id]/connections
- * 代理获取 Agent 的连接列表
+ * Proxy the agent connection list through Manager
  *
- * rauto 端点: GET /api/connections
- * rauto 响应: [{ name, host, port, device_profile, has_password }]
+ * rauto endpoint: GET /api/connections
+ * rauto response: [{ name, host, port, device_profile, has_password }]
  */
 export async function GET(
   _request: NextRequest,
@@ -76,11 +76,11 @@ export async function GET(
 
 /**
  * PUT /api/agents/[id]/connections
- * 代理调用 Agent 创建/更新连接配置
+ * Proxy connection create/update requests to the agent
  *
- * rauto 端点: PUT /api/connections/{name}
- * rauto 请求体: { connection: { host, port, username, password, enable_password, device_profile, ssh_security }, save_password: bool }
- * rauto 响应: { name, path, has_password, connection: {...} }
+ * rauto endpoint: PUT /api/connections/{name}
+ * rauto request body: { connection: { host, port, username, password, enable_password, device_profile, ssh_security }, save_password: bool }
+ * rauto response: { name, path, has_password, connection: {...} }
  */
 export async function PUT(
   request: NextRequest,

@@ -4,7 +4,7 @@ import { isNotificationEnabled } from "@/lib/settings";
 import type { NotificationType, NotificationLevel } from "@/lib/types";
 import type { Prisma } from "@prisma/client";
 
-// ===== SSE 广播器（全局单例） =====
+// ===== SSE Broadcaster (global singleton) =====
 
 const globalForEmitter = globalThis as unknown as {
   notificationEmitter: EventEmitter | undefined;
@@ -13,14 +13,14 @@ const globalForEmitter = globalThis as unknown as {
 export const notificationEmitter =
   globalForEmitter.notificationEmitter ?? new EventEmitter();
 
-// 避免 MaxListenersExceededWarning（多个 SSE 客户端同时连接）
+// Avoid MaxListenersExceededWarning when multiple SSE clients connect at once
 notificationEmitter.setMaxListeners(50);
 
 if (process.env.NODE_ENV !== "production") {
   globalForEmitter.notificationEmitter = notificationEmitter;
 }
 
-// ===== 通知创建 =====
+// ===== Notification Creation =====
 
 interface CreateNotificationParams {
   type: NotificationType;
@@ -31,8 +31,9 @@ interface CreateNotificationParams {
 }
 
 /**
- * 创建通知：检查配置开关 → 写入数据库 → SSE 广播
- * 设计为不阻塞主流程，调用方使用 .catch() 静默处理失败
+ * Create a notification by checking config, writing to the database,
+ * and broadcasting over SSE. It is designed not to block the main flow;
+ * callers can safely handle failures with a silent `.catch()`.
  */
 export async function createNotification(
   params: CreateNotificationParams
@@ -51,6 +52,6 @@ export async function createNotification(
     },
   });
 
-  // 广播给所有 SSE 客户端
+  // Broadcast to all connected SSE clients
   notificationEmitter.emit("notification", notification);
 }

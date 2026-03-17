@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
-  // 验证 API Key
+  // Validate the API key
   if (!validateAgentApiKey(request)) {
     return unauthorizedResponse();
   }
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     const body: AgentHeartbeatInput = await request.json();
 
-    // 验证必填字段
+    // Validate required fields
     if (!body.name) {
       return NextResponse.json(
         { success: false, error: "缺少必填字段: name" },
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 按 name 更新心跳时间和运行时指标
+    // Update heartbeat time and runtime metrics by agent name
     await prisma.agent.update({
       where: { name: body.name },
       data: {

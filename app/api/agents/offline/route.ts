@@ -7,7 +7,7 @@ import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 export async function POST(request: NextRequest) {
-  // 验证 API Key
+  // Validate the API key
   if (!validateAgentApiKey(request)) {
     return unauthorizedResponse();
   }
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body: AgentOfflineInput = await request.json();
     const t = await getSystemTranslator();
 
-    // 验证必填字段
+    // Validate required fields
     if (!body.name) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 设置 Agent 为离线并重置运行时指标
+    // Mark the agent as offline and reset runtime metrics
     await prisma.agent.update({
       where: { name: body.name },
       data: {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 通知：Agent 离线
+    // Notification: agent offline
     createNotification({
       type: "agent_offline",
       title: t("notifications.agentOffline"),

@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // 全部标记已读
+    // Mark all notifications as read
     if (body.all === true) {
       const result = await prisma.notification.updateMany({
         where: { read: false },
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 单条标记已读
+    // Mark a single notification as read
     if (body.id) {
       await prisma.notification.update({
         where: { id: body.id },

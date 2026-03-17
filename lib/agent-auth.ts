@@ -4,18 +4,18 @@ import type { ApiResponse } from "@/lib/types";
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 
 /**
- * 验证 Agent API Key
- * 支持两种认证方式：
- *   1. Authorization: Bearer <token>（rauto agent 使用）
+ * Validate the Agent API key.
+ * Supports two authentication mechanisms:
+ *   1. Authorization: Bearer <token> (used by rauto agent)
  *   2. X-API-Key: <token>
- * 未配置 AGENT_API_KEY 环境变量时放行（开发环境友好）
+ * If AGENT_API_KEY is not configured, allow the request for development convenience.
  */
 export function validateAgentApiKey(request: NextRequest): boolean {
   if (!AGENT_API_KEY) {
     return true;
   }
 
-  // 优先检查 Authorization: Bearer <token>
+  // Check Authorization: Bearer <token> first
   const authHeader = request.headers.get("Authorization") ?? "";
   if (authHeader.startsWith("Bearer ")) {
     const bearerToken = authHeader.slice(7).trim();
@@ -24,13 +24,13 @@ export function validateAgentApiKey(request: NextRequest): boolean {
     }
   }
 
-  // 兼容 X-API-Key 头
+  // Fall back to the X-API-Key header
   const apiKey = request.headers.get("X-API-Key");
   return apiKey === AGENT_API_KEY;
 }
 
 /**
- * 创建 401 未授权响应
+ * Create a 401 unauthorized response.
  */
 export function unauthorizedResponse(): NextResponse<ApiResponse<never>> {
   return NextResponse.json(

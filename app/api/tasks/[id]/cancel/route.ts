@@ -6,7 +6,7 @@ import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 /**
  * POST /api/tasks/[id]/cancel
- * 取消一个 pending 或 running 状态的任务
+ * Cancel a task that is still pending or running
  */
 export async function POST(
   _request: NextRequest,
@@ -46,7 +46,7 @@ export async function POST(
       },
     });
 
-    // 创建通知
+    // Create a notification
     createNotification({
       type: "task_failed",
       title: t("notifications.taskCancelled"),

@@ -20,16 +20,16 @@ class ApiClient {
       },
     });
 
-    // 统一处理错误响应：将后端返回的 { success: false, error: "..." } 从 throw 转为正常返回
-    // 这样调用方可以统一通过 result.success 判断，而非 try/catch
+    // Normalize API error responses: turn backend `{ success: false, error: "..." }`
+    // into ordinary return values so callers can branch on `result.success`.
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
         if (isAxiosError(error) && error.response?.data) {
-          // 后端有返回体，将其作为正常响应返回
+          // If the backend returned a response body, treat it as a normal payload
           return { data: error.response.data };
         }
-        // 网络错误等无响应的情况，继续 throw
+        // Keep throwing when there is no response body, such as a network failure
         throw error;
       }
     );

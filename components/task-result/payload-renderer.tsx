@@ -11,10 +11,10 @@ interface PayloadRendererProps {
   payload: Record<string, unknown>;
 }
 
-// 简化翻译函数类型，避免 next-intl 复杂泛型导致 ReactNode 不兼容
+// Simplified translator type to avoid ReactNode incompatibilities from next-intl generics
 type TFunc = (key: string) => string;
 
-// 根据 dispatchType 结构化展示 Payload 输入参数
+// Render payload inputs in a structured way based on the dispatch type
 export function PayloadRenderer({
   dispatchType,
   payload,
@@ -24,10 +24,10 @@ export function PayloadRenderer({
 
   return (
     <div className="space-y-3">
-      {/* 连接信息卡片 */}
+      {/* Connection details card */}
       <ConnectionCard connection={payload.connection as Record<string, unknown> | undefined} t={t} />
 
-      {/* 按 dispatchType 分派展示 */}
+      {/* Render by dispatch type */}
       {dispatchType === "exec" && <ExecPayload payload={payload} t={t} />}
       {dispatchType === "template" && (
         <TemplatePayload payload={payload} t={t} />
@@ -45,7 +45,7 @@ export function PayloadRenderer({
   );
 }
 
-// ── 连接信息卡片 ────────────────────────────────────────────────────
+// -- Connection details card -------------------------------------------------
 
 function ConnectionCard({
   connection,

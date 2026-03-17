@@ -7,13 +7,13 @@ const AGENT_API_KEY = process.env.AGENT_API_KEY;
 
 /**
  * POST /api/agents/report-error
- * Agent 错误上报接口
+ * Agent error reporting endpoint.
  *
- * 认证：Bearer token 或 X-API-Key header
+ * Auth: Bearer token or X-API-Key header.
  */
 export async function POST(request: NextRequest) {
   try {
-    // 认证检查
+    // Check authentication
     const authHeader = request.headers.get("authorization");
     const apiKeyHeader = request.headers.get("x-api-key");
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // 验证必需字段
+    // Validate required fields
     if (!body.name || !body.category || !body.kind || !body.severity || !body.occurred_at) {
       const response: ApiResponse<null> = {
         success: false,
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
-    // 验证 severity
+    // Validate severity
     if (!["warning", "error"].includes(body.severity)) {
       const response: ApiResponse<null> = {
         success: false,
@@ -47,10 +47,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response, { status: 400 });
     }
 
-    // 生成事件 ID
+    // Generate the event ID
     const eventId = `err_${nanoid(16)}`;
 
-    // 落库（存储到 AgentErrorReport 表）
+    // Persist the report in the AgentErrorReport table
     await prisma.agentErrorReport.create({
       data: {
         eventId,

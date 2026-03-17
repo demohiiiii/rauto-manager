@@ -1,7 +1,7 @@
 {
   "name": "rauto-manager",
   "version": "1.0.0",
-  "description": "Rauto Manager - 网络设备自动化管理平台",
+  "description": "Rauto Manager - Network device automation management platform",
   "main": "index.js",
   "scripts": {
     "dev": "next dev --turbopack",

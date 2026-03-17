@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { username, password } = body;
 
-    // 验证必填字段
+    // Validate required fields
     if (!username || !password) {
       return NextResponse.json(
         {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 查找管理员
+    // Look up the admin user
     const admin = await prisma.admin.findUnique({
       where: { username },
     });
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 验证密码
+    // Verify the password
     const isValid = await verifyPassword(password, admin.password);
     if (!isValid) {
       return NextResponse.json(
@@ -46,13 +46,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 创建 JWT token
+    // Create the JWT token
     const token = await createToken({
       adminId: admin.id,
       username: admin.username,
     });
 
-    // 设置 cookie
+    // Set the auth cookie
     await setAuthCookie(token);
 
     return NextResponse.json({

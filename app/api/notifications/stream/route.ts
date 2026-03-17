@@ -9,12 +9,12 @@ export async function GET() {
 
   const stream = new ReadableStream({
     start(controller) {
-      // 发送初始连接成功事件
+      // Send the initial connection-success event
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`),
       );
 
-      // 监听新通知
+      // Listen for new notifications
       const onNotification = (notification: unknown) => {
         try {
           controller.enqueue(
@@ -27,7 +27,7 @@ export async function GET() {
 
       notificationEmitter.on("notification", onNotification);
 
-      // 心跳保活（每 30 秒）
+      // Keep the stream alive with a heartbeat every 30 seconds
       const heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": heartbeat\n\n"));

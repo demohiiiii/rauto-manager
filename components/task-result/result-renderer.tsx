@@ -12,7 +12,7 @@ interface ResultRendererProps {
   result: unknown;
 }
 
-// 根据 dispatchType 分派到对应结果组件
+// Route each dispatch type to its matching result component
 export function ResultRenderer({ dispatchType, result }: ResultRendererProps) {
   const tc = useTranslations("common");
 
@@ -24,7 +24,7 @@ export function ResultRenderer({ dispatchType, result }: ResultRendererProps) {
     );
   }
 
-  // 确保 result 是对象类型
+  // Ensure result is an object before rendering
   const data =
     typeof result === "object" && !Array.isArray(result)
       ? (result as Record<string, unknown>)

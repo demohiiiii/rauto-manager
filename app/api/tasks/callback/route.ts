@@ -7,7 +7,7 @@ import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 export async function POST(request: NextRequest) {
-  // 验证 API Key
+  // Validate the API key
   if (!validateAgentApiKey(request)) {
     return unauthorizedResponse();
   }
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body: TaskCallbackInput = await request.json();
     const t = await getSystemTranslator();
 
-    // 验证必填字段
+    // Validate required fields
     if (!body.task_id || !body.agent_name || !body.status) {
       return NextResponse.json(
         {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 status 值
+    // Validate the status value
     if (!["success", "failed"].includes(body.status)) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
@@ -35,9 +35,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 使用事务同时更新 Task 和创建 ExecutionHistory
+    // Update the task and create execution history inside a transaction
     const updatedTask = await prisma.$transaction(async (tx) => {
-      // 查找对应的 Agent
+      // Find the matching agent
       const agent = await tx.agent.findUnique({
         where: { name: body.agent_name },
       });
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         throw new Error(t("common.agentNotFound", { name: body.agent_name }));
       }
 
-      // 验证 Task 存在
+      // Ensure the task exists
       const task = await tx.task.findUnique({
         where: { id: body.task_id },
       });
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
         throw new Error(t("common.taskNotFound", { id: body.task_id }));
       }
 
-      // 更新 Task 状态
+      // Update the task status
       const resultData: Prisma.InputJsonValue =
         body.status === "success"
           ? ((body.result as Prisma.InputJsonValue) ?? { success: true })
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 创建执行历史记录
+      // Create the execution history record
       await tx.executionHistory.create({
         data: {
           taskId: body.task_id,
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       return { task: updated, agent };
     });
 
-    // 通知：任务执行结果
+    // Notification: task execution result
     createNotification({
       type: body.status === "success" ? "task_success" : "task_failed",
       title: body.status === "success" ? t("notifications.taskSuccess") : t("notifications.taskFailed"),

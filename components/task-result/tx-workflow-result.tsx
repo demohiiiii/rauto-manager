@@ -42,7 +42,7 @@ export function TxWorkflowResult({ result }: TxWorkflowResultProps) {
 
   return (
     <div className="space-y-3">
-      {/* 摘要 */}
+      {/* Summary */}
       <MetaGrid>
         <MetaCard label={t("workflowName")} value={workflowName} />
         <MetaCard
@@ -59,7 +59,7 @@ export function TxWorkflowResult({ result }: TxWorkflowResultProps) {
         )}
       </MetaGrid>
 
-      {/* 逐块结果 */}
+      {/* Per-block results */}
       {blocks.map((block, i) => (
         <SectionCard
           key={i}
@@ -70,7 +70,7 @@ export function TxWorkflowResult({ result }: TxWorkflowResultProps) {
         </SectionCard>
       ))}
 
-      {/* 整体输出 */}
+      {/* Aggregate output */}
       {data.output && <OutputBlock content={data.output} maxHeight="200px" />}
       {data.error && (
         <OutputBlock content={data.error} maxHeight="200px" isError />

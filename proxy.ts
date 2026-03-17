@@ -6,27 +6,27 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "rauto-manager-secret-key-change-in-production"
 );
 
-// 公开路径（不需要认证）
+// Public paths that do not require authentication
 const PUBLIC_PATHS = [
   "/login",
   "/setup",
   "/api/auth/init",
   "/api/auth/login",
-  // Agent 通信端点（使用 X-API-Key 认证，不走 JWT cookie）
+  // Agent communication endpoints use X-API-Key auth instead of JWT cookies
   "/api/agents/register",
   "/api/agents/heartbeat",
   "/api/agents/offline",
   "/api/agents/report-devices",
   "/api/agents/update-device-status",
   "/api/tasks/callback",
-  // SSE 通知流（需要 JWT，但不能被 proxy 重定向，因为 EventSource 不支持重定向）
+  // The SSE notification stream still needs JWT auth, but cannot be redirected by proxy
   "/api/notifications/stream",
 ];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 静态资源和 Next.js 内部路径直接放行
+  // Allow static assets and Next.js internal paths through immediately
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
@@ -35,31 +35,31 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 检查是否是公开路径
+  // Check whether the current path is public
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
-  // 获取 token
+  // Read the auth token from cookies
   const token = request.cookies.get("auth-token")?.value;
 
-  // 验证 token
+  // Verify the auth token
   let isAuthenticated = false;
   if (token) {
     try {
       await jwtVerify(token, JWT_SECRET);
       isAuthenticated = true;
     } catch {
-      // Token 无效或过期
+      // Token is invalid or expired
       isAuthenticated = false;
     }
   }
 
-  // 已认证用户访问登录/设置页面，重定向到首页
+  // Redirect authenticated users away from login and setup pages
   if (isAuthenticated && (pathname === "/login" || pathname === "/setup")) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // 未认证用户访问受保护路径，重定向到登录页
-  // 初始化检查由 /login 页面客户端调用 /api/auth/init 完成
+  // Redirect unauthenticated users visiting protected routes to /login
+  // The initialization check is handled client-side on /login via /api/auth/init
   if (!isAuthenticated && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);

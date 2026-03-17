@@ -5,7 +5,7 @@ import { serializeAgent } from "@/lib/utils";
 
 export async function GET() {
   try {
-    // 并行查询所有统计数据
+    // Query all dashboard stats in parallel
     const [
       agents,
       devices,
@@ -14,7 +14,7 @@ export async function GET() {
       weekTasks,
       recentNotifications,
     ] = await Promise.all([
-      // Agent 统计
+      // Agent stats
       prisma.agent.findMany({
         select: {
           id: true,
@@ -25,14 +25,14 @@ export async function GET() {
         },
       }),
 
-      // 设备统计
+      // Device stats
       prisma.device.findMany({
         select: {
           status: true,
         },
       }),
 
-      // 今日任务统计
+      // Today's task stats
       prisma.task.findMany({
         where: {
           createdAt: {
@@ -44,7 +44,7 @@ export async function GET() {
         },
       }),
 
-      // 最近 5 条任务（用于最近活动）
+      // Five most recent tasks for the activity feed
       prisma.task.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
@@ -57,7 +57,7 @@ export async function GET() {
         },
       }),
 
-      // 过去 7 天任务统计
+      // Task stats for the last 7 days
       prisma.task.findMany({
         where: {
           createdAt: {
@@ -69,7 +69,7 @@ export async function GET() {
         },
       }),
 
-      // 最近 3 条通知
+      // Three most recent notifications
       prisma.notification.findMany({
         take: 3,
         orderBy: { createdAt: "desc" },
@@ -84,27 +84,27 @@ export async function GET() {
       }),
     ]);
 
-    // Agent 统计
+    // Agent stats
     const onlineAgents = agents.filter((a) => a.status === "online");
     const activeAgentCount = onlineAgents.length;
 
-    // 设备统计
+    // Device stats
     const totalDevices = devices.length;
     const onlineDevices = devices.filter((d) => d.status === "reachable").length;
     const offlineDevices = totalDevices - onlineDevices;
 
-    // 今日任务统计
+    // Today's task stats
     const todayTotal = todayTasks.length;
     const todaySuccess = todayTasks.filter((t) => t.status === "success").length;
     const todayFailed = todayTasks.filter((t) => t.status === "failed").length;
 
-    // 过去 7 天任务统计
+    // Task stats for the last 7 days
     const weekTotal = weekTasks.length;
     const weekSuccess = weekTasks.filter((t) => t.status === "success").length;
     const weekRunning = weekTasks.filter((t) => t.status === "running").length;
     const weekFailed = weekTasks.filter((t) => t.status === "failed").length;
 
-    // 系统健康度计算（基于在线 Agent 比例和任务成功率）
+    // Calculate system health from the online agent ratio and task success rate
     const agentHealthScore = agents.length > 0 ? (activeAgentCount / agents.length) * 100 : 100;
     const taskHealthScore = weekTotal > 0 ? (weekSuccess / weekTotal) * 100 : 100;
     const systemHealth = Math.round((agentHealthScore + taskHealthScore) / 2);

@@ -53,7 +53,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     sshSecurity: "balanced" as "secure" | "balanced" | "legacy-compatible",
   });
 
-  // 获取在线 Agent 列表
+  // Fetch the online agent list
   const { data: agentsData } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
@@ -61,7 +61,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
 
   const onlineAgents = (agentsData?.data ?? []).filter((a) => a.status === "online");
 
-  // 当选中 Agent 时，通过 Manager 代理获取其支持的 Device Profile
+  // When an agent is selected, fetch its supported device profiles through the Manager proxy
   useEffect(() => {
     if (!formData.agentId) {
       setDeviceProfiles([]);
@@ -94,7 +94,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setTestResult(null);
 
-    // 切换 Agent 时清空 Device Profile
+    // Clear the selected device profile when switching agents
     if (field === "agentId") {
       setFormData((prev) => ({ ...prev, deviceProfile: "" }));
     }
@@ -150,7 +150,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     setSubmitting(true);
 
     try {
-      // 1. 先通过 Manager 代理同步到 rauto Agent（保存连接配置）
+      // 1. Sync to the rauto Agent through the Manager proxy first (save the connection config)
       const saveConnectionResponse = await fetch(`/api/agents/${formData.agentId}/connections`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -172,7 +172,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
         throw new Error(t("syncToRautoFailed", { error: saveResult.error || tc("unknownError") }));
       }
 
-      // 2. 再添加到 Manager 数据库
+      // 2. Then persist the device in the Manager database
       const response = await fetch("/api/devices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

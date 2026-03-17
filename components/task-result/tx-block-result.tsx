@@ -31,7 +31,7 @@ export function TxBlockResult({ result }: TxBlockResultProps) {
 
   return (
     <div className="space-y-3">
-      {/* 摘要指标 */}
+      {/* Summary metrics */}
       <MetaGrid>
         <MetaCard
           label={t("committed")}
@@ -51,7 +51,7 @@ export function TxBlockResult({ result }: TxBlockResultProps) {
         )}
       </MetaGrid>
 
-      {/* 失败信息 */}
+      {/* Failure details */}
       {data.failed_step !== undefined && (
         <SectionCard title={t("failedStep")} variant="error">
           <div className="space-y-1 text-sm">
@@ -70,7 +70,7 @@ export function TxBlockResult({ result }: TxBlockResultProps) {
         </SectionCard>
       )}
 
-      {/* 回滚错误 */}
+      {/* Rollback error */}
       {data.rollback_errors && data.rollback_errors.length > 0 && (
         <SectionCard title={t("rollbackErrors")} variant="error">
           <div className="space-y-1">
@@ -81,7 +81,7 @@ export function TxBlockResult({ result }: TxBlockResultProps) {
         </SectionCard>
       )}
 
-      {/* 整体输出 */}
+      {/* Aggregate output */}
       {data.output && <OutputBlock content={data.output} maxHeight="200px" />}
       {data.error && !data.failure_reason && (
         <OutputBlock content={data.error} maxHeight="200px" isError />

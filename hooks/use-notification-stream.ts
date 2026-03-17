@@ -23,7 +23,7 @@ export function useNotificationStream() {
     const connect = () => {
       if (!mounted) return;
 
-      // 清理旧连接
+      // Close the previous connection before reconnecting
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
@@ -39,17 +39,17 @@ export function useNotificationStream() {
         try {
           const data = JSON.parse(event.data);
 
-          // 跳过连接成功事件
+          // Skip the synthetic "connected" event
           if (data.type === "connected") {
             return;
           }
 
           const notification = data as Notification;
 
-          // 更新 store
+          // Update the notification store
           addNotification(notification);
 
-          // 显示 toast
+          // Show a toast notification
           const icon = LEVEL_ICON_MAP[notification.level];
           const message = `${icon} ${notification.title}`;
 

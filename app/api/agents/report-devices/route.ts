@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 查找 Agent
+    // Look up the agent
     const agent = await prisma.agent.findUnique({
       where: { name: body.name },
     });
@@ -52,18 +52,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 事务内全量同步设备列表（不更新状态）
+    // Fully sync the device list inside a transaction without changing status
     const syncedDevices = await prisma.$transaction(async (tx) => {
       const existingDevices = await tx.device.findMany({
         where: { agentId: agent.id },
       });
 
-      // 构建上报设备的唯一标识集合
+      // Build a set of unique identifiers for reported devices
       const reportedKeys = new Set(
         body.devices.map((d) => `${d.name}:${d.host}`)
       );
 
-      // 删除上报列表中不存在的旧设备
+      // Remove old devices that are no longer present in the reported list
       const toDelete = existingDevices.filter(
         (d) => !reportedKeys.has(`${d.name}:${d.host}`)
       );
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Upsert 上报的设备（仅更新基本信息，不更新状态）
+      // Upsert reported devices while keeping their current status
       const results = [];
       for (const device of body.devices) {
         const existing = existingDevices.find(
@@ -81,18 +81,18 @@ export async function POST(request: NextRequest) {
         );
 
         if (existing) {
-          // 更新设备基本信息，保留原有状态
+          // Update basic device fields while preserving the existing status
           const updated = await tx.device.update({
             where: { id: existing.id },
             data: {
               type: device.device_profile ?? existing.type,
               port: device.port ?? existing.port,
-              // 不更新 status 和 lastChecked
+              // Keep status and lastChecked unchanged
             },
           });
           results.push(updated);
         } else {
-          // 新设备默认状态为 unknown
+          // Default new devices to unknown status
           const created = await tx.device.create({
             data: {
               agentId: agent.id,
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       data: { synced: syncedDevices.length },
     };
 
-    // 通知：设备上报
+    // Notification: device report received
     createNotification({
       type: "device_report",
       title: t("notifications.deviceListSync"),

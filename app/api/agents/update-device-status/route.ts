@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 查找 Agent
+    // Look up the agent
     const agent = await prisma.agent.findUnique({
       where: { name: body.name },
     });
@@ -48,14 +48,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 批量更新设备状态
+    // Update device status in batches
     const updatedCount = await prisma.$transaction(async (tx) => {
       let count = 0;
 
       for (const device of body.devices) {
         const status = device.reachable ? "reachable" : "unreachable";
 
-        // 根据 name + host 查找设备
+        // Find the device by name + host
         const result = await tx.device.updateMany({
           where: {
             agentId: agent.id,

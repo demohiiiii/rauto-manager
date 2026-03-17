@@ -5,7 +5,7 @@ import type { ApiResponse } from "@/lib/types";
 
 /**
  * GET /api/settings/locale
- * 获取当前系统语言设置
+ * Get the current system locale
  */
 export async function GET() {
   try {
@@ -32,12 +32,12 @@ export async function GET() {
 
 /**
  * PUT /api/settings/locale
- * 更新系统语言设置
+ * Update the system locale
  * Body: { locale: "zh" | "en" }
  */
 export async function PUT(request: NextRequest) {
   try {
-    // 验证管理员权限
+    // Validate admin permissions
     const admin = await getCurrentAdmin();
     if (!admin) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { locale } = body;
 
-    // 验证 locale 值
+    // Validate the locale value
     if (!locale || !["zh", "en"].includes(locale)) {
       return NextResponse.json(
         {
@@ -60,7 +60,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // 更新或创建配置
+    // Update or create the config entry
     await prisma.systemConfig.upsert({
       where: { key: "system.locale" },
       update: { value: locale },

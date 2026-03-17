@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notification";
 
-const DEFAULT_TIMEOUT_MS = 120000; // 2 分钟
+const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
 
 /**
- * 惰性检测超时 Agent
- * 将超过阈值未发送心跳的 online Agent 标记为 offline
- * 返回受影响的 Agent 数量
+ * Lazily detect timed-out agents.
+ * Mark online agents as offline once they have missed heartbeats past the threshold.
+ * Return the number of affected agents.
  */
 export async function markTimedOutAgents(): Promise<number> {
   const timeoutMs = parseInt(
@@ -14,7 +14,7 @@ export async function markTimedOutAgents(): Promise<number> {
   );
   const threshold = new Date(Date.now() - timeoutMs);
 
-  // 先查出即将被标记为离线的 Agent 名称（用于通知）
+  // Fetch the soon-to-be-offlined agent names first so notifications can include them
   const timedOutAgents = await prisma.agent.findMany({
     where: {
       status: "online",
@@ -34,7 +34,7 @@ export async function markTimedOutAgents(): Promise<number> {
     data: { status: "offline" },
   });
 
-  // 为每个超时 Agent 创建通知
+  // Create a notification for each timed-out agent
   for (const agent of timedOutAgents) {
     createNotification({
       type: "agent_timeout",

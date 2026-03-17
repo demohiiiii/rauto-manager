@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body: DispatchRequest = await request.json();
     const t = await getSystemTranslator();
 
-    // 验证必填字段
+    // Validate required fields
     if (!body.type || !body.agent_id || !body.payload) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 dispatch type
+    // Validate the dispatch type
     if (!VALID_TYPES.includes(body.type)) {
       return NextResponse.json(
         {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 exec 类型必须有 command
+    // Ensure exec requests include a command
     if (body.type === "exec" && !body.payload.command) {
       return NextResponse.json(
         { success: false, error: "exec 类型必须提供 payload.command" },
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 template 类型必须有 template
+    // Ensure template requests include a template
     if (body.type === "template" && !body.payload.template) {
       return NextResponse.json(
         { success: false, error: "template 类型必须提供 payload.template" },
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 tx_block 类型必须有 commands
+    // Ensure tx_block requests include commands
     if (body.type === "tx_block" && !Array.isArray(body.payload.commands)) {
       return NextResponse.json(
         { success: false, error: "tx_block 类型必须提供 payload.commands 数组" },
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 tx_workflow 类型必须有 workflow
+    // Ensure tx_workflow requests include a workflow
     if (body.type === "tx_workflow" && !body.payload.workflow) {
       return NextResponse.json(
         { success: false, error: "tx_workflow 类型必须提供 payload.workflow" },
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 orchestrate 类型必须有 plan
+    // Ensure orchestrate requests include a plan
     if (body.type === "orchestrate" && !body.payload.plan) {
       return NextResponse.json(
         { success: false, error: "orchestrate 类型必须提供 payload.plan" },
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 查找 Agent
+    // Look up the agent
     const agent = await prisma.agent.findUnique({
       where: { id: body.agent_id },
     });
@@ -100,11 +100,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构造任务名称
+    // Build the task name
     const typeLabel = t(`tasks.dispatchType.${body.type}`);
     const taskName = `[${typeLabel}] ${summarizePayload(body)}`;
 
-    // 创建 Task 记录
+    // Create the task record
     const task = await prisma.task.create({
       data: {
         name: taskName,
@@ -116,13 +116,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 构造回调 URL
+    // Build the callback URL
     const baseUrl =
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
     const callbackUrl = `${baseUrl}/tasks/callback`;
 
     try {
-      // 调用 Agent
+      // Call the agent
       await dispatchToAgent({
         agent: { host: agent.host, port: agent.port },
         type: body.type,
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
         },
       };
 
-      // 通知：任务下发
+      // Notification: task dispatched
       createNotification({
         type: "task_dispatched",
         title: t("notifications.taskDispatched"),
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(response);
     } catch (dispatchError) {
-      // Agent 调用失败，更新 Task 为 failed
+      // If the agent call fails, mark the task as failed
       await prisma.task.update({
         where: { id: task.id },
         data: {
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 生成任务摘要
+ * Generate a task summary
  */
 function summarizePayload(req: DispatchRequest): string {
   switch (req.type) {

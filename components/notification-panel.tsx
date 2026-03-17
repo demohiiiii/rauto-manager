@@ -108,7 +108,7 @@ export function NotificationPanel() {
   const tc = useTranslations("common");
 
   useEffect(() => {
-    // 初始加载通知列表
+    // Load notifications on first render
     fetch("/api/notifications?limit=20")
       .then((res) => res.json())
       .then((data) => {

@@ -5,7 +5,7 @@ const AGENT_TIMEOUT_MS = 10000;
 
 /**
  * GET /api/agents/[id]/device-profiles
- * 代理获取 Agent 的 device profiles（builtin + custom）
+ * Proxy agent device profiles (builtin + custom) through Manager
  */
 export async function GET(
   _request: NextRequest,
@@ -53,10 +53,10 @@ export async function GET(
       );
     }
 
-    // rauto 返回 { builtins: [{ name, aliases, summary }], custom: [{ name, path }] }
+    // rauto returns { builtins: [{ name, aliases, summary }], custom: [{ name, path }] }
     const data = await response.json();
 
-    // 提取所有 profile 名称（builtin names + custom names）
+    // Collect every profile name (builtin names + custom names)
     const builtinNames: string[] = (data.builtins ?? []).map(
       (p: { name: string }) => p.name
     );

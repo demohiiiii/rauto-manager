@@ -5,11 +5,11 @@ const TEST_TIMEOUT_MS = 30000;
 
 /**
  * POST /api/agents/[id]/test-connection
- * 代理调用 Agent 的连接测试接口
+ * Proxy the agent connection test endpoint through Manager
  *
- * rauto 端点: POST /api/connection/test
- * rauto 请求体: { connection: { host, port, username, password, enable_password, device_profile, ssh_security } }
- * rauto 响应: { ok: bool, host, port, username, ssh_security, device_profile }
+ * rauto endpoint: POST /api/connection/test
+ * rauto request body: { connection: { host, port, username, password, enable_password, device_profile, ssh_security } }
+ * rauto response: { ok: bool, host, port, username, ssh_security, device_profile }
  */
 export async function POST(
   request: NextRequest,
@@ -71,7 +71,7 @@ export async function POST(
       );
     }
 
-    // rauto 返回 { ok: bool, host, port, username, device_profile }
+    // rauto returns { ok: bool, host, port, username, device_profile }
     const result = await response.json();
 
     return NextResponse.json({

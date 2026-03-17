@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, SkipForward } from "lucide-react";
 
 // ── MetaCard ─────────────────────────────────────────────────────────
-// 摘要指标卡 — 上方小字标签，下方大字值，支持颜色变体
+// Summary metric card with a small label above a large value and optional color variants
 type MetaVariant = "default" | "success" | "error" | "warning";
 
 const META_VARIANT_CLASSES: Record<MetaVariant, string> = {
@@ -52,7 +52,7 @@ export function MetaCard({ label, value, variant = "default" }: MetaCardProps) {
 }
 
 // ── MetaGrid ─────────────────────────────────────────────────────────
-// MetaCard 网格容器
+// Grid container for MetaCard items
 export function MetaGrid({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -100,7 +100,7 @@ export function StatusBadge({ status, label }: StatusBadgeProps) {
 }
 
 // ── OutputBlock ──────────────────────────────────────────────────────
-// 等宽输出块，深色背景，可滚动
+// Monospace output block with a dark background and scrolling
 interface OutputBlockProps {
   content: string | null | undefined;
   maxHeight?: string;
@@ -130,7 +130,7 @@ export function OutputBlock({
 }
 
 // ── SectionCard ──────────────────────────────────────────────────────
-// 区域卡片容器，带标题
+// Section card container with a title
 type SectionVariant = "default" | "success" | "error";
 
 const SECTION_BORDER_CLASSES: Record<SectionVariant, string> = {
@@ -171,7 +171,7 @@ export function SectionCard({
 }
 
 // ── KeyValueRow ──────────────────────────────────────────────────────
-// 简单的 key-value 行展示
+// Simple key-value row display
 interface KeyValueRowProps {
   label: string;
   value: React.ReactNode;
@@ -190,7 +190,7 @@ export function KeyValueRow({ label, value, mono = false }: KeyValueRowProps) {
 }
 
 // ── FallbackJson ─────────────────────────────────────────────────────
-// 未知类型的 JSON 回退展示
+// Fallback JSON renderer for unknown result shapes
 interface FallbackJsonProps {
   data: unknown;
   emptyText?: string;

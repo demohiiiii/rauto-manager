@@ -8,10 +8,10 @@ import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 /**
  * POST /api/tasks/[id]/execute
- * 执行一个 pending 状态的任务
+ * Execute a task that is still in the pending state.
  *
- * 从 Task 记录中取出 dispatchType + payload + agentIds[0]，
- * 调用 dispatchToAgent() 发送到 Agent
+ * Read dispatchType, payload, and agentIds[0] from the task record,
+ * then send the request to the agent through dispatchToAgent().
  */
 export async function POST(
   _request: NextRequest,
@@ -47,7 +47,7 @@ export async function POST(
       );
     }
 
-    // 查找 Agent
+    // Look up the agent
     const agent = await prisma.agent.findUnique({
       where: { id: task.agentIds[0] },
     });
@@ -69,7 +69,7 @@ export async function POST(
       );
     }
 
-    // 更新状态为 running
+    // Mark the task as running
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
@@ -78,7 +78,7 @@ export async function POST(
       },
     });
 
-    // 构造回调 URL
+    // Build the callback URL
     const baseUrl =
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
     const callbackUrl = `${baseUrl}/tasks/callback`;
@@ -86,14 +86,14 @@ export async function POST(
     const payload = (task.payload ?? {}) as Record<string, unknown>;
     const dispatchType = task.dispatchType as DispatchType;
 
-    // 提取 connection（如果 payload 中包含）
+    // Extract connection if it exists inside the payload
     const connection = payload.connection as
       | Record<string, unknown>
       | undefined;
     const dryRun = payload.dry_run as boolean | undefined;
     const recordLevel = payload.record_level as string | undefined;
 
-    // 构建不含 meta 字段的纯 payload
+    // Build a clean payload without the meta field
     const { connection: _conn, dry_run: _dry, record_level: _rec, ...purePayload } = payload;
 
     try {
@@ -108,7 +108,7 @@ export async function POST(
         recordLevel: recordLevel,
       });
 
-      // 通知：任务执行
+      // Notification: task execution started
       createNotification({
         type: "task_dispatched",
         title: t("notifications.taskDispatched"),
@@ -136,7 +136,7 @@ export async function POST(
       return NextResponse.json(response);
     } catch (dispatchError) {
       const t = await getSystemTranslator();
-      // Agent 调用失败，更新 Task 为 failed
+      // If the agent call fails, mark the task as failed
       await prisma.task.update({
         where: { id },
         data: {

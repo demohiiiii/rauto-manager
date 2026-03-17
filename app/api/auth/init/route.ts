@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { username, password, email } = body;
 
-    // 验证必填字段
+    // Validate required fields
     if (!username || !password) {
       return NextResponse.json(
         {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 检查是否已经初始化过
+    // Check whether the system has already been initialized
     const existingAdmin = await prisma.admin.findFirst();
     if (existingAdmin) {
       return NextResponse.json(
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 创建管理员账户
+    // Create the admin account
     const hashedPassword = await hashPassword(password);
     const admin = await prisma.admin.create({
       data: {
@@ -41,13 +41,13 @@ export async function POST(request: Request) {
       },
     });
 
-    // 创建 JWT token
+    // Create the JWT token
     const token = await createToken({
       adminId: admin.id,
       username: admin.username,
     });
 
-    // 设置 cookie
+    // Set the auth cookie
     await setAuthCookie(token);
 
     return NextResponse.json({
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   }
 }
 
-// 检查是否需要初始化
+// Check whether the system still needs initialization
 export async function GET() {
   try {
     const adminCount = await prisma.admin.count();

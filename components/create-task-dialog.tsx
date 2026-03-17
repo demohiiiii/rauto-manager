@@ -68,20 +68,20 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const [dryRun, setDryRun] = useState(false);
   const [recordLevel, setRecordLevel] = useState<"Off" | "KeyEventsOnly" | "Full">("Off");
 
-  // 表单数据
+  // Form state
   const [execData, setExecData] = useState<ExecFormData>(defaultExecFormData);
   const [templateData, setTemplateData] = useState<TemplateFormData>(defaultTemplateFormData);
   const [txBlockData, setTxBlockData] = useState<TxBlockFormData>(defaultTxBlockFormData);
   const [txWorkflowData, setTxWorkflowData] = useState<TxWorkflowFormData>(defaultTxWorkflowFormData);
   const [orchestrateData, setOrchestrateData] = useState<OrchestrateFormData>(defaultOrchestrateFormData);
 
-  // 连接列表
+  // Connection list
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
 
   const queryClient = useQueryClient();
 
-  // 获取在线 Agent 列表
+  // Fetch the online agent list
   const { data: agentsData } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
@@ -91,7 +91,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     (a) => a.status === "online"
   );
 
-  // 当选中 Agent 变更时，获取连接列表
+  // Reload connections whenever the selected agent changes
   useEffect(() => {
     if (!agentId) {
       setConnections([]);
@@ -117,7 +117,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     fetchConnections();
   }, [agentId]);
 
-  // 重置表单
+  // Reset the form
   const resetForm = () => {
     setAgentId("");
     setDispatchType("exec");
@@ -131,7 +131,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     setOrchestrateData(defaultOrchestrateFormData);
   };
 
-  // 验证表单
+  // Validate the form
   const validateForm = (): string | null => {
     if (!agentId) return t("selectAgent");
     if (dispatchType !== "orchestrate" && !connectionName) return t("selectConnection");
@@ -152,7 +152,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     }
   };
 
-  // 构建 payload
+  // Build the dispatch payload
   const buildPayload = (): Record<string, unknown> => {
     switch (dispatchType) {
       case "exec":
@@ -170,7 +170,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     }
   };
 
-  // 提交
+  // Submit the task
   const handleSubmit = async () => {
     const error = validateForm();
     if (error) {
@@ -183,7 +183,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     try {
       const payload = buildPayload();
 
-      // 构建连接信息
+      // Build the connection payload
       const connection =
         dispatchType !== "orchestrate" && connectionName
           ? { connection_name: connectionName }
@@ -229,7 +229,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         </DialogHeader>
 
         <div className="space-y-5 py-4">
-          {/* Agent 选择 */}
+          {/* Agent selection */}
           <div className="space-y-2">
             <Label>
               {t("targetAgent")} <span className="text-destructive">*</span>
@@ -252,7 +252,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             </Select>
           </div>
 
-          {/* 下发类型选择 */}
+          {/* Dispatch type selection */}
           <div className="space-y-2">
             <Label>{t("dispatchType.label")}</Label>
             <div className="grid grid-cols-5 gap-2">
@@ -272,7 +272,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             </div>
           </div>
 
-          {/* 设备连接选择（orchestrate 不需要） */}
+          {/* Device connection selection (not required for orchestrate) */}
           {dispatchType !== "orchestrate" && (
             <div className="space-y-2">
               <Label>
@@ -312,7 +312,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             </div>
           )}
 
-          {/* 公共选项 */}
+          {/* Shared options */}
           <div className="flex items-center gap-6">
             {dispatchType !== "exec" && (
               <div className="flex items-center gap-2">
@@ -344,7 +344,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             </div>
           </div>
 
-          {/* 类型特定表单 */}
+          {/* Type-specific form */}
           <div className="border-t pt-4">
             {dispatchType === "exec" && (
               <ExecForm value={execData} onChange={setExecData} />

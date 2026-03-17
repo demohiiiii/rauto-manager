@@ -46,7 +46,7 @@ export function TemplateResult({ result }: TemplateResultProps) {
 
   return (
     <div className="space-y-3">
-      {/* 摘要指标网格 */}
+      {/* Summary metric grid */}
       <MetaGrid>
         <MetaCard label={t("total")} value={total} />
         <MetaCard
@@ -61,7 +61,7 @@ export function TemplateResult({ result }: TemplateResultProps) {
         />
       </MetaGrid>
 
-      {/* 渲染后的命令 */}
+      {/* Rendered command */}
       {renderedCommands && (
         <SectionCard title={t("renderedCommands")}>
           <OutputBlock
@@ -75,7 +75,7 @@ export function TemplateResult({ result }: TemplateResultProps) {
         </SectionCard>
       )}
 
-      {/* 逐条命令结果 */}
+      {/* Per-command results */}
       {results.length > 0 && (
         <SectionCard title={t("commandResults")}>
           <div className="space-y-2">
@@ -115,7 +115,7 @@ export function TemplateResult({ result }: TemplateResultProps) {
         </SectionCard>
       )}
 
-      {/* 整体输出 / 错误（无逐条结果时） */}
+      {/* Aggregate output / error when per-command results are unavailable */}
       {results.length === 0 && data.output && (
         <OutputBlock content={data.output} maxHeight="300px" />
       )}

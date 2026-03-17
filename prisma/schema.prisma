@@ -1,5 +1,5 @@
 // Prisma Schema for Rauto Manager
-// 数据库持久化方案
+// Database persistence schema
 
 generator client {
   provider = "prisma-client-js"
@@ -21,7 +21,7 @@ model Agent {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // 运行时指标（由 Agent 心跳上报）
+  // Runtime metrics reported through agent heartbeats
   connectionsCount  Int @default(0)
   templatesCount    Int @default(0)
   activeSessions    Int @default(0)
@@ -63,7 +63,7 @@ model Task {
   template     String   @default("")
   variables    Json     @default("{}")
   dispatchType String   @default("exec") // exec, template, tx_block, tx_workflow, orchestrate
-  payload      Json     @default("{}") // 完整的下发负载（type-specific）
+  payload      Json     @default("{}") // Full dispatch payload (type-specific)
   status       String   @default("pending") // pending, running, success, failed, cancelled
   result       Json?
   createdAt    DateTime @default(now())

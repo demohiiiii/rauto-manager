@@ -3,7 +3,7 @@ import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 
-// dispatch type → rauto Agent API 路径映射
+// Map dispatch types to rauto Agent API endpoints
 const DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
   exec: "/api/exec",
   template: "/api/template/execute",
@@ -12,7 +12,7 @@ const DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
   orchestrate: "/api/orchestrate",
 };
 
-// 超时配置：exec 较快，其他可能耗时较长
+// Timeout settings: exec is usually faster, other types may take longer
 const DISPATCH_TIMEOUT_MAP: Record<DispatchType, number> = {
   exec: 30_000,
   template: 60_000,
@@ -37,7 +37,7 @@ interface DispatchOptions {
   recordLevel?: string;
 }
 
-// RecordLevel: Manager 使用 PascalCase，rauto Agent 使用 kebab-case
+// RecordLevel uses PascalCase in Manager and kebab-case in rauto Agent
 const RECORD_LEVEL_MAP: Record<string, string> = {
   Off: "off",
   KeyEventsOnly: "key-events-only",
@@ -45,8 +45,8 @@ const RECORD_LEVEL_MAP: Record<string, string> = {
 };
 
 /**
- * 构建发送给 Agent 的完整请求体
- * 将 Manager 的 dispatch 请求转换为 rauto Agent 接受的格式
+ * Build the full request payload sent to the agent.
+ * Convert the Manager dispatch request into the format accepted by rauto Agent.
  */
 function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
   const { type, taskId, callbackUrl, connection, payload, dryRun, recordLevel } = options;
@@ -57,17 +57,17 @@ function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
     callback_url: callbackUrl,
   };
 
-  // 注入连接信息（exec/template/tx_block/tx_workflow 支持 connection 字段）
+  // Inject connection details for dispatch types that support the connection field
   if (connection && type !== "orchestrate") {
     base.connection = connection;
   }
 
-  // 注入 dry_run（template/tx_block/tx_workflow/orchestrate 支持）
+  // Inject dry_run for dispatch types that support it
   if (dryRun !== undefined && type !== "exec") {
     base.dry_run = dryRun;
   }
 
-  // 注入 record_level（转换为 kebab-case 格式）
+  // Inject record_level after converting it to kebab-case
   if (recordLevel) {
     base.record_level = RECORD_LEVEL_MAP[recordLevel] ?? recordLevel;
   }
@@ -76,8 +76,8 @@ function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
 }
 
 /**
- * 向 Agent 发送下发请求
- * 返回 Agent 的响应（成功时），或抛出错误（失败时）
+ * Send a dispatch request to the agent.
+ * Return the agent response on success or throw on failure.
  */
 export async function dispatchToAgent(
   options: DispatchOptions

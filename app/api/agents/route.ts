@@ -6,7 +6,7 @@ import { serializeAgent } from "@/lib/utils";
 
 export async function GET() {
   try {
-    // 惰性检测超时 Agent（将超时的 online Agent 标记为 offline）
+    // Lazily detect timed-out agents and mark stale online agents as offline
     await markTimedOutAgents();
 
     const agents = await prisma.agent.findMany({

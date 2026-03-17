@@ -122,7 +122,7 @@ export default function Home() {
       if (!res.ok) throw new Error(t("fetchDashboardFailed"));
       return res.json();
     },
-    refetchInterval: 30000, // 每 30 秒刷新
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const dashboardData = data?.data;

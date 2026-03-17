@@ -1,4 +1,4 @@
-// Agent 相关类型
+// Agent-related types
 export interface Agent {
   id: string;
   name: string;
@@ -24,7 +24,7 @@ export interface AgentCreateInput {
   capabilities?: string[];
 }
 
-// 设备相关类型
+// Device-related types
 export interface Device {
   id: string;
   agentId: string;
@@ -44,7 +44,7 @@ export interface Device {
   };
 }
 
-// 任务相关类型
+// Task-related types
 export type DispatchType =
   | "exec"
   | "template"
@@ -86,7 +86,7 @@ export interface TaskCreateInput {
   variables?: Record<string, any>;
 }
 
-// API 响应类型
+// API response types
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -98,7 +98,7 @@ export interface ApiResponse<T> {
   };
 }
 
-// 执行历史
+// Execution history
 export interface ExecutionHistory {
   id: string;
   taskId: string;
@@ -136,9 +136,9 @@ export interface ExecutionHistoryStats {
   averageDuration: number;
 }
 
-// ===== 统一下发类型 =====
+// ===== Unified dispatch types =====
 
-// 设备连接信息（发送给 Agent）
+// Device connection info sent to the agent
 export interface ConnectionPayload {
   connection_name?: string;
   host?: string;
@@ -150,7 +150,7 @@ export interface ConnectionPayload {
   template_dir?: string;
 }
 
-// 统一下发请求
+// Unified dispatch request
 export interface DispatchRequest {
   type: DispatchType;
   agent_id: string;
@@ -160,9 +160,9 @@ export interface DispatchRequest {
   record_level?: "Off" | "KeyEventsOnly" | "Full";
 }
 
-// ===== Agent 通信类型 =====
+// ===== Agent communication types =====
 
-// Agent 注册请求
+// Agent registration request
 export interface AgentRegisterInput {
   name: string;
   host: string;
@@ -173,7 +173,7 @@ export interface AgentRegisterInput {
   templates_count?: number;
 }
 
-// Agent 心跳请求
+// Agent heartbeat request
 export interface AgentHeartbeatInput {
   name: string;
   status: string;
@@ -184,12 +184,12 @@ export interface AgentHeartbeatInput {
   uptime_seconds?: number;
 }
 
-// Agent 离线请求
+// Agent offline request
 export interface AgentOfflineInput {
   name: string;
 }
 
-// 任务回调请求
+// Task callback request
 export interface TaskCallbackInput {
   task_id: string;
   agent_name: string;
@@ -201,7 +201,7 @@ export interface TaskCallbackInput {
   error?: string;
 }
 
-// ===== 通知系统类型 =====
+// ===== Notification system types =====
 
 export type NotificationType =
   | "agent_online"

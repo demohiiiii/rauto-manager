@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // 检查系统是否需要初始化（首次使用时跳转到 /setup）
+  // Check whether the system still needs initialization and redirect first-time users to /setup
   useEffect(() => {
     async function checkInit() {
       try {
@@ -31,7 +31,7 @@ export default function LoginPage() {
           return;
         }
       } catch {
-        // 检查失败时继续显示登录页
+        // If the check fails, keep showing the login page
       }
       setChecking(false);
     }
@@ -73,7 +73,7 @@ export default function LoginPage() {
     }
   };
 
-  // 初始化检查中显示加载状态
+  // Show a loading state while the initialization check is running
   if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background">

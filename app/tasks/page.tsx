@@ -148,7 +148,7 @@ export default function TasksPage() {
 
   const queryClient = useQueryClient();
 
-  // 查询任务列表（有 running 任务时自动轮询）
+  // Query the task list and auto-poll while tasks are running
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["tasks"],
     queryFn: () => apiClient.getTasks(),
@@ -161,7 +161,7 @@ export default function TasksPage() {
 
   const tasks = data?.data ?? [];
 
-  // 执行任务 mutation
+  // Execute-task mutation
   const executeMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.executeTask(taskId),
     onSuccess: (result) => {
@@ -177,7 +177,7 @@ export default function TasksPage() {
     },
   });
 
-  // 取消任务 mutation
+  // Cancel-task mutation
   const cancelMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.cancelTask(taskId),
     onSuccess: (result) => {
@@ -416,20 +416,20 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* 创建任务对话框 */}
+      {/* Create task dialog */}
       <CreateTaskDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
       />
 
-      {/* 任务详情对话框 */}
+      {/* Task details dialog */}
       <TaskDetailDialog
         open={!!detailTask}
         onOpenChange={(open) => { if (!open) setDetailTask(null); }}
         task={detailTask}
       />
 
-      {/* 确认操作对话框 */}
+      {/* Confirmation dialog */}
       <AlertDialog
         open={!!confirmAction}
         onOpenChange={(open) => { if (!open) setConfirmAction(null); }}

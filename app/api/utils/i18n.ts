@@ -6,8 +6,8 @@ type Messages = typeof zhMessages;
 type Locale = "zh" | "en";
 
 /**
- * 获取系统当前语言设置（从数据库读取）
- * 注意：为了保证语言切换的实时性，这里不使用缓存
+ * Read the current system locale from the database.
+ * Caching is intentionally avoided so locale changes take effect immediately.
  */
 export async function getSystemLocale(): Promise<Locale> {
   try {
@@ -23,9 +23,9 @@ export async function getSystemLocale(): Promise<Locale> {
 }
 
 /**
- * 获取翻译函数
- * @param locale 语言代码
- * @returns 翻译函数 t(key, params)
+ * Build a translator function.
+ * @param locale Locale code
+ * @returns Translator function `t(key, params)`
  */
 export function getTranslator(locale: Locale) {
   const messages: Messages = locale === "en" ? enMessages : zhMessages;
@@ -34,7 +34,7 @@ export function getTranslator(locale: Locale) {
     key: string,
     params?: Record<string, string | number | Date>
   ): string {
-    // 支持嵌套 key: "notifications.taskSuccess"
+    // Support nested keys such as "notifications.taskSuccess"
     const keys = key.split(".");
     let value: any = messages;
 
@@ -46,7 +46,7 @@ export function getTranslator(locale: Locale) {
       }
     }
 
-    // 参数替换: "Task {name} completed" + {name: "test"} → "Task test completed"
+    // Replace placeholders: "Task {name} completed" + {name: "test"} => "Task test completed"
     if (typeof value === "string" && params) {
       return value.replace(/\{(\w+)\}/g, (_, paramKey) => {
         const paramValue = params[paramKey];
@@ -54,7 +54,7 @@ export function getTranslator(locale: Locale) {
           console.warn(`Translation parameter not found: ${paramKey} in key ${key}`);
           return `{${paramKey}}`;
         }
-        // 处理 Date 类型
+        // Handle Date instances explicitly
         if (paramValue instanceof Date) {
           return paramValue.toLocaleString();
         }
@@ -67,7 +67,7 @@ export function getTranslator(locale: Locale) {
 }
 
 /**
- * 便捷函数：获取当前系统语言的翻译函数
+ * Convenience helper that returns the translator for the active system locale.
  */
 export async function getSystemTranslator() {
   const locale = await getSystemLocale();

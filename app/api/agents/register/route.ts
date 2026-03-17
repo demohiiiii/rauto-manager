@@ -6,7 +6,7 @@ import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 export async function POST(request: NextRequest) {
-  // 验证 API Key
+  // Validate the API key
   if (!validateAgentApiKey(request)) {
     return unauthorizedResponse();
   }
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const body: AgentRegisterInput = await request.json();
     const t = await getSystemTranslator();
 
-    // 验证必填字段
+    // Validate required fields
     if (!body.name || !body.host || !body.port) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // upsert: 重复注册更新为 online，新注册创建记录
+    // Upsert: mark repeat registrations online and create records for new agents
     const agent = await prisma.agent.upsert({
       where: { name: body.name },
       update: {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         capabilities: body.capabilities ?? undefined,
         connectionsCount: body.connections_count ?? 0,
         templatesCount: body.templates_count ?? 0,
-        // 注册时重置运行时指标
+        // Reset runtime metrics when the agent registers
         activeSessions: 0,
         runningTasksCount: 0,
         uptimeSeconds: 0,
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         },
       };
 
-    // 通知：Agent 上线
+    // Notification: agent online
     createNotification({
       type: "agent_online",
       title: t("notifications.agentOnline"),

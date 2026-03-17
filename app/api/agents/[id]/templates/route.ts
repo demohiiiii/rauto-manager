@@ -5,10 +5,10 @@ const AGENT_TIMEOUT_MS = 10000;
 
 /**
  * GET /api/agents/[id]/templates
- * 代理获取 Agent 的模板列表
+ * Proxy the agent template list through Manager
  *
- * rauto 端点: GET /api/templates
- * rauto 响应: [{ name, path }]
+ * rauto endpoint: GET /api/templates
+ * rauto response: [{ name, path }]
  */
 export async function GET(
   _request: NextRequest,

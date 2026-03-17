@@ -59,7 +59,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
 
   return (
     <div className="space-y-3">
-      {/* 摘要 */}
+      {/* Summary */}
       <MetaGrid>
         <MetaCard label={t("planName")} value={planName} />
         <MetaCard
@@ -80,7 +80,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
         )}
       </MetaGrid>
 
-      {/* 逐阶段卡片 */}
+      {/* Per-stage cards */}
       {stages.map((stage, i) => {
         const stageOk =
           stage.success !== false && stage.status !== "failed";
@@ -93,7 +93,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
             variant={stageOk ? "success" : "error"}
           >
             <div className="space-y-2">
-              {/* Stage 元信息 */}
+              {/* Stage metadata */}
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 {stage.strategy && (
                   <span className="bg-muted px-2 py-0.5 rounded text-xs font-medium">
@@ -111,7 +111,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
                 )}
               </div>
 
-              {/* Target 列表 */}
+              {/* Target list */}
               {targets.length > 0 && (
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-xs">
@@ -165,7 +165,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
                 </div>
               )}
 
-              {/* Stage 错误 */}
+              {/* Stage error */}
               {stage.error && (
                 <OutputBlock
                   content={stage.error}
@@ -178,7 +178,7 @@ export function OrchestrateResult({ result }: OrchestrateResultProps) {
         );
       })}
 
-      {/* 整体输出 */}
+      {/* Aggregate output */}
       {data.output && <OutputBlock content={data.output} maxHeight="200px" />}
       {data.error && (
         <OutputBlock content={data.error} maxHeight="200px" isError />

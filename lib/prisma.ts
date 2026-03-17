@@ -26,7 +26,7 @@ function normalizeDatabaseUrl(databaseUrl: string): string {
   }
 }
 
-// Prisma 7 需要通过 adapter 传递数据库连接
+// Prisma 7 requires the database connection to be passed through an adapter
 function createPrismaClient() {
   const databaseUrl = process.env.DATABASE_URL;
 
@@ -34,7 +34,7 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  // 创建 PostgreSQL 连接池
+  // Create the PostgreSQL connection pool
   const pool = new pg.Pool({
     connectionString: normalizeDatabaseUrl(databaseUrl),
   });

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Agent 包含 BigInt 字段，需要转换后才能 JSON 序列化
+    // Agent objects include BigInt fields, so serialize them before returning JSON
     const serializable = devices.map((d) => ({
       ...d,
       agent: serializeAgent(d.agent),
