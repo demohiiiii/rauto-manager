@@ -18,6 +18,7 @@ Neon 配置需要确认：
 - 在 Vercel 创建项目的向导里安装或选择 `Neon` integration。
 - 如果是在部署向导里新建 Neon 数据库，`DATABASE_URL` 会由集成自动注入，不需要手填。
 - 如果你是绑定已有的 Neon 数据库，需要把 `DATABASE_URL` 设为对应数据库的 Neon Postgres 连接串。
+- 如果 Neon 另外提供了用于迁移的直连串，建议把它配置到 `DIRECT_DATABASE_URL`，供 Prisma 迁移使用。
 - 必须把 Prisma migration 文件提交到 `prisma/migrations/`，这样 `prisma migrate deploy` 才有可执行内容。
 - Production 和 Preview 应使用不同的 Neon 数据库或 branch，不要共用同一个库。
 - 在 Vercel 表单里仍然需要手动填写 `JWT_SECRET` 和 `AGENT_API_KEY`。

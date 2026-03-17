@@ -22,6 +22,7 @@ Neon setup requirements:
 - Install or select the `Neon` integration during the Vercel setup flow.
 - Let the integration inject `DATABASE_URL`; you do not need to enter it manually when creating a new Neon database from the deploy flow.
 - If you link an existing Neon database, set `DATABASE_URL` to the Neon Postgres connection string for that database.
+- If Neon provides a separate direct connection string, set `DIRECT_DATABASE_URL` to that direct URL for Prisma migrations.
 - Keep Prisma migrations committed under `prisma/migrations/` so `prisma migrate deploy` has something to apply.
 - Use separate Neon databases or branches for Production and Preview instead of pointing both environments at the same database.
 - You still need to enter `JWT_SECRET` and `AGENT_API_KEY` manually in the Vercel form.
@@ -171,6 +172,11 @@ npx prisma migrate dev --name init
 3. Use a dedicated Neon database or branch for each environment. Do not point Preview and Production at the same database.
 
 4. Deploy normally. Vercel will run `npm run build:vercel`, which applies committed migrations with `prisma migrate deploy` before building the Next.js app.
+
+If you see an error like `The table public.Admin does not exist`, it usually means either:
+
+- `prisma migrate deploy` did not run successfully during the build, or
+- Vercel runtime is pointing at a different Neon database or branch than the one migrations were applied to.
 
 Do not place migrations inside request handlers or Prisma client initialization. On Vercel, there is no single long-lived app startup lifecycle you can safely rely on for one-time schema changes.
 
