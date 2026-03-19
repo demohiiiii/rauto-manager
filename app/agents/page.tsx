@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { RegisterAgentDialog } from "@/components/register-agent-dialog";
@@ -18,6 +17,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Server,
   Plus,
   RefreshCw,
@@ -26,6 +35,7 @@ import {
   AlertTriangle,
   Activity,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import type { Agent } from "@/lib/types";
 import { useTranslations } from "next-intl";
@@ -93,8 +103,11 @@ function AgentCardSkeleton() {
 export default function AgentsPage() {
   const t = useTranslations("agents");
   const tc = useTranslations("common");
+  const td = useTranslations("dialogs");
+  const queryClient = useQueryClient();
   const [healthCheckingId, setHealthCheckingId] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
@@ -122,6 +135,33 @@ export default function AgentsPage() {
     },
     onSettled: () => {
       setHealthCheckingId(null);
+    },
+  });
+
+  const deleteAgentMutation = useMutation({
+    mutationFn: (agent: Agent) => apiClient.deleteAgent(agent.id),
+    onSuccess: (result, agent) => {
+      if (result.success) {
+        toast.success(t("deleteAgentSuccess", { name: agent.name }));
+        if (selectedAgent?.id === agent.id) {
+          setSelectedAgent(null);
+        }
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+        queryClient.invalidateQueries({ queryKey: ["devices"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      } else {
+        toast.error(
+          t("deleteAgentFailed", {
+            error: result.error ?? tc("unknownError"),
+          }),
+        );
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(t("deleteAgentFailed", { error: error.message }));
+    },
+    onSettled: () => {
+      setAgentToDelete(null);
     },
   });
 
@@ -271,34 +311,53 @@ export default function AgentsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 hover-scale"
-                      onClick={() => setSelectedAgent(agent)}
-                    >
-                      {tc("viewDetails")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 hover-scale"
-                      onClick={() =>
-                        healthCheckMutation.mutate({
-                          id: agent.id,
-                          name: agent.name,
-                        })
-                      }
-                      disabled={healthCheckMutation.isPending}
-                    >
-                      {healthCheckingId === agent.id ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <Activity className="h-3 w-3 mr-1" />
-                      )}
-                      {t("healthCheck")}
-                    </Button>
+                  <div className="space-y-2 pt-2">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 hover-scale"
+                        onClick={() => setSelectedAgent(agent)}
+                      >
+                        {tc("viewDetails")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 hover-scale"
+                        onClick={() =>
+                          healthCheckMutation.mutate({
+                            id: agent.id,
+                            name: agent.name,
+                          })
+                        }
+                        disabled={healthCheckMutation.isPending}
+                      >
+                        {healthCheckingId === agent.id ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Activity className="h-3 w-3 mr-1" />
+                        )}
+                        {t("healthCheck")}
+                      </Button>
+                    </div>
+                    {agent.status === "offline" && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full hover-scale"
+                        onClick={() => setAgentToDelete(agent)}
+                        disabled={deleteAgentMutation.isPending}
+                      >
+                        {deleteAgentMutation.isPending &&
+                        agentToDelete?.id === agent.id ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3 w-3 mr-1" />
+                        )}
+                        {t("deleteAgent")}
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -315,6 +374,50 @@ export default function AgentsPage() {
         }}
         agent={selectedAgent}
       />
+      <AlertDialog
+        open={Boolean(agentToDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAgentToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{td("agentDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {agentToDelete
+                ? td("agentDeleteDescription", { name: agentToDelete.name })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteAgentMutation.isPending}>
+              {tc("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                if (!agentToDelete) {
+                  return;
+                }
+                deleteAgentMutation.mutate(agentToDelete);
+              }}
+              disabled={deleteAgentMutation.isPending}
+            >
+              {deleteAgentMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {td("agentDeleting")}
+                </>
+              ) : (
+                tc("delete")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

@@ -3,6 +3,8 @@ import { Providers } from "./providers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   const t = await getTranslations("common");
   return {

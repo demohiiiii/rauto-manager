@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import { markTimedOutAgents } from "@/lib/agent-timeout";
+import {
+  AgentManagementError,
+  deleteOfflineAgentById,
+} from "@/lib/agent-management";
 import { serializeAgent } from "@/lib/utils";
 
 export async function GET() {
@@ -76,12 +80,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await prisma.agent.delete({
-      where: { id },
-    });
+    const deletedAgent = await deleteOfflineAgentById(id);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, data: deletedAgent });
   } catch (error) {
+    if (error instanceof AgentManagementError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status },
+      );
+    }
+
     const response: ApiResponse<never> = {
       success: false,
       error: error instanceof Error ? error.message : "删除 Agent 失败",

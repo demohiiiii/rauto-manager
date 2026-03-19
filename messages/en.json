@@ -109,6 +109,9 @@
     "title": "Agent Management",
     "subtitle": "Manage and monitor all rauto Agent instances",
     "registerAgent": "Register Agent",
+    "deleteAgent": "Delete Agent",
+    "deleteAgentSuccess": "Agent \"{name}\" and its devices were deleted",
+    "deleteAgentFailed": "Failed to delete Agent: {error}",
     "totalAgents": "Total Agents",
     "onlineAgents": "Online",
     "statusBusy": "Busy",
@@ -406,7 +409,7 @@
     "resetSystemFailed": "Failed to reset system",
     "language": "Language",
     "languageDescription": "Choose the display language for the interface",
-    "languageReloadNotice": "The page will reload to apply the new language"
+    "languageReloadNotice": "The page will refresh to apply the new language"
   },
   "dialogs": {
     "createTaskTitle": "Create Task",
@@ -514,6 +517,9 @@
     "agentDetailReachableDevices": "Reachable",
     "agentDetailUnreachableDevices": "Unreachable",
     "agentDetailMoreDevices": "{count} more devices not shown",
+    "agentDeleteTitle": "Delete Offline Agent",
+    "agentDeleteDescription": "Are you sure you want to delete offline Agent \"{name}\"? All devices managed by this Agent will also be deleted. This action cannot be undone.",
+    "agentDeleting": "Deleting...",
     "deviceDetailTitle": "Device Details",
     "deviceDetailDescription": "Inspect connection details for device \"{name}\"",
     "deviceDetailLastChecked": "Last Checked",

@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import zhMessages from "@/messages/zh.json";
 import enMessages from "@/messages/en.json";
@@ -11,6 +12,8 @@ type Locale = "zh" | "en";
  */
 export async function getSystemLocale(): Promise<Locale> {
   try {
+    noStore();
+
     const config = await prisma.systemConfig.findUnique({
       where: { key: "system.locale" },
     });

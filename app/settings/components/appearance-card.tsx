@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   Card,
@@ -21,6 +22,7 @@ const THEME_ICONS = { Sun, Moon, Laptop } as const;
 
 export function AppearanceCard() {
   const t = useTranslations("settings");
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const currentLocale = useLocale() as Locale;
   const [colorTheme, setColorTheme] = useState("zinc");
@@ -51,10 +53,7 @@ export function AppearanceCard() {
         throw new Error("Failed to update language");
       }
 
-      // Append a timestamp to bypass cache and then force a hard refresh
-      const url = new URL(window.location.href);
-      url.searchParams.set("_t", Date.now().toString());
-      window.location.href = url.toString();
+      router.refresh();
     } catch (error) {
       toast.error(t("updateSettingsFailed"));
       console.error("Language change error:", error);

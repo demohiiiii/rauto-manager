@@ -109,6 +109,9 @@
     "title": "Agent 管理",
     "subtitle": "管理和监控所有 rauto Agent 实例",
     "registerAgent": "注册 Agent",
+    "deleteAgent": "删除 Agent",
+    "deleteAgentSuccess": "Agent「{name}」及其关联设备已删除",
+    "deleteAgentFailed": "删除 Agent 失败: {error}",
     "totalAgents": "总计 Agent",
     "onlineAgents": "在线",
     "statusBusy": "忙碌",
@@ -407,7 +410,7 @@
     "resetSystemFailed": "系统重置失败",
     "language": "语言",
     "languageDescription": "选择界面的显示语言",
-    "languageReloadNotice": "页面将重新加载以应用新语言"
+    "languageReloadNotice": "页面将刷新以应用新语言"
   },
   "dialogs": {
     "createTaskTitle": "创建任务",
@@ -515,6 +518,9 @@
     "agentDetailReachableDevices": "可达",
     "agentDetailUnreachableDevices": "不可达",
     "agentDetailMoreDevices": "还有 {count} 台设备未显示",
+    "agentDeleteTitle": "删除离线 Agent",
+    "agentDeleteDescription": "确定要删除离线 Agent「{name}」吗？该 Agent 下面的所有设备也会一并删除，此操作不可撤销。",
+    "agentDeleting": "删除中...",
     "deviceDetailTitle": "设备详情",
     "deviceDetailDescription": "查看设备「{name}」的连接信息和状态",
     "deviceDetailLastChecked": "最后检查时间",
