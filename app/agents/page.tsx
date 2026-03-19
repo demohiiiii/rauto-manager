@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { RegisterAgentDialog } from "@/components/register-agent-dialog";
+import { AgentDetailDialog } from "@/components/agent-detail-dialog";
 import {
   Card,
   CardContent,
@@ -22,9 +25,11 @@ import {
   WifiOff,
   AlertTriangle,
   Activity,
+  Loader2,
 } from "lucide-react";
 import type { Agent } from "@/lib/types";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 function AgentStatusBadge({ status }: { status: Agent["status"] }) {
   const t = useTranslations("agents");
@@ -40,6 +45,12 @@ function AgentStatusBadge({ status }: { status: Agent["status"] }) {
       variant: "secondary" as const,
       icon: WifiOff,
       className: "",
+    },
+    busy: {
+      labelKey: "statusBusy",
+      variant: "default" as const,
+      icon: Activity,
+      className: "bg-blue-600 hover:bg-blue-700",
     },
     error: {
       labelKey: "statusError",
@@ -82,12 +93,37 @@ function AgentCardSkeleton() {
 export default function AgentsPage() {
   const t = useTranslations("agents");
   const tc = useTranslations("common");
-  const { data, isLoading, error } = useQuery({
+  const [healthCheckingId, setHealthCheckingId] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
   });
 
   const agents = data?.data ?? [];
+
+  const healthCheckMutation = useMutation({
+    mutationFn: async (agent: Pick<Agent, "id" | "name">) => {
+      setHealthCheckingId(agent.id);
+      const result = await apiClient.checkAgentHealth(agent.id);
+      return { agent, result };
+    },
+    onSuccess: ({ agent, result }) => {
+      if (result.success && result.data?.healthy) {
+        toast.success(`${agent.name}: ${t("healthCheck")} OK`);
+      } else {
+        toast.error(
+          `${agent.name}: ${result.error ?? `${t("healthCheck")} failed`}`
+        );
+      }
+    },
+    onError: (error: Error, agent) => {
+      toast.error(`${agent.name}: ${error.message}`);
+    },
+    onSettled: () => {
+      setHealthCheckingId(null);
+    },
+  });
 
   return (
     <DashboardLayout>
@@ -101,8 +137,16 @@ export default function AgentsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="hover-scale">
-              <RefreshCw className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-scale"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+              />
               {tc("refresh")}
             </Button>
             <RegisterAgentDialog>
@@ -228,11 +272,31 @@ export default function AgentsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="flex-1 hover-scale">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 hover-scale"
+                      onClick={() => setSelectedAgent(agent)}
+                    >
                       {tc("viewDetails")}
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1 hover-scale">
-                      <Activity className="h-3 w-3 mr-1" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 hover-scale"
+                      onClick={() =>
+                        healthCheckMutation.mutate({
+                          id: agent.id,
+                          name: agent.name,
+                        })
+                      }
+                      disabled={healthCheckMutation.isPending}
+                    >
+                      {healthCheckingId === agent.id ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Activity className="h-3 w-3 mr-1" />
+                      )}
                       {t("healthCheck")}
                     </Button>
                   </div>
@@ -242,6 +306,15 @@ export default function AgentsPage() {
           </div>
         )}
       </div>
+      <AgentDetailDialog
+        open={Boolean(selectedAgent)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedAgent(null);
+          }
+        }}
+        agent={selectedAgent}
+      />
     </DashboardLayout>
   );
 }

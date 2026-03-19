@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package rauto.manager.v1;
+
+service AgentReportingService {
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc SendHeartbeat(HeartbeatRequest) returns (AckResponse);
+  rpc NotifyOffline(OfflineRequest) returns (AckResponse);
+  rpc ReportDevices(ReportDevicesRequest) returns (ReportDevicesResponse);
+  rpc UpdateDeviceStatus(UpdateDeviceStatusRequest) returns (UpdateDeviceStatusResponse);
+  rpc ReportError(ReportErrorRequest) returns (AckResponse);
+  rpc ReportTaskCallback(TaskCallbackRequest) returns (AckResponse);
+}
+
+message AckResponse {
+  bool success = 1;
+}
+
+message RegisterAgentRequest {
+  string name = 1;
+  string host = 2;
+  uint32 port = 3;
+  string version = 4;
+  repeated string capabilities = 5;
+  uint32 connections_count = 6;
+  uint32 templates_count = 7;
+}
+
+message RegisterAgentResponse {
+  bool success = 1;
+}
+
+message HeartbeatRequest {
+  string name = 1;
+  string status = 2;
+  uint32 active_sessions = 3;
+  uint32 running_tasks = 4;
+  uint32 connections_count = 5;
+  uint32 templates_count = 6;
+  uint64 uptime_seconds = 7;
+}
+
+message OfflineRequest {
+  string name = 1;
+}
+
+message ReportedInventoryDevice {
+  string name = 1;
+  string host = 2;
+  uint32 port = 3;
+  string device_profile = 4;
+}
+
+message ReportedDeviceStatus {
+  string name = 1;
+  string host = 2;
+  bool reachable = 3;
+}
+
+message ReportDevicesRequest {
+  string name = 1;
+  repeated ReportedInventoryDevice devices = 2;
+}
+
+message ReportDevicesResponse {
+  bool success = 1;
+  uint32 synced = 2;
+}
+
+message UpdateDeviceStatusRequest {
+  string name = 1;
+  repeated ReportedDeviceStatus devices = 2;
+}
+
+message UpdateDeviceStatusResponse {
+  bool success = 1;
+  uint32 updated = 2;
+}
+
+message ReportErrorRequest {
+  string name = 1;
+  string category = 2;
+  string kind = 3;
+  string severity = 4;
+  string occurred_at = 5;
+  optional string task_id = 6;
+  optional string operation = 7;
+  optional string target_url = 8;
+  optional string http_method = 9;
+  optional uint32 http_status = 10;
+  bool retryable = 11;
+  string message = 12;
+  optional string details_json = 13;
+}
+
+message TaskCallbackRequest {
+  string agent_name = 1;
+  string task_id = 2;
+  string status = 3;
+  string started_at = 4;
+  string completed_at = 5;
+  uint64 execution_time_ms = 6;
+  optional string result_json = 7;
+  optional string error = 8;
+}

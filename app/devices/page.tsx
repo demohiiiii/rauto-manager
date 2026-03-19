@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { AddDeviceDialog } from "@/components/add-device-dialog";
+import { DeviceDetailDialog } from "@/components/device-detail-dialog";
 import {
   Card,
   CardContent,
@@ -14,6 +16,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -32,11 +44,19 @@ import {
   Eye,
   Trash2,
   Server,
+  Loader2,
 } from "lucide-react";
 import type { Device } from "@/lib/types";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
-function DeviceStatusBadge({ status }: { status: Device["status"] }) {
+function DeviceStatusBadge({
+  status,
+  reason,
+}: {
+  status: Device["status"];
+  reason?: Device["statusReason"];
+}) {
   const t = useTranslations("devices");
   const config = {
     reachable: {
@@ -62,10 +82,17 @@ function DeviceStatusBadge({ status }: { status: Device["status"] }) {
   const { labelKey, variant, icon: Icon, className } = config[status];
 
   return (
-    <Badge variant={variant} className={className}>
-      <Icon className="h-3 w-3 mr-1" />
-      {t(labelKey)}
-    </Badge>
+    <div className="space-y-1">
+      <Badge variant={variant} className={className}>
+        <Icon className="h-3 w-3 mr-1" />
+        {t(labelKey)}
+      </Badge>
+      {reason === "agent_offline" && (
+        <p className="text-xs text-muted-foreground">
+          {t("statusReasonAgentOffline")}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -89,12 +116,39 @@ function TableSkeleton() {
 export default function DevicesPage() {
   const t = useTranslations("devices");
   const tc = useTranslations("common");
-  const { data, isLoading, error } = useQuery({
+  const td = useTranslations("dialogs");
+  const queryClient = useQueryClient();
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["devices"],
     queryFn: () => apiClient.getDevices(),
   });
 
   const devices = data?.data ?? [];
+
+  const deleteDeviceMutation = useMutation({
+    mutationFn: (device: Device) => apiClient.deleteDevice(device.id),
+    onSuccess: (result, device) => {
+      if (result.success) {
+        toast.success(t("deleteDeviceSuccess", { name: device.name }));
+        queryClient.invalidateQueries({ queryKey: ["devices"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      } else {
+        toast.error(
+          t("deleteDeviceFailed", {
+            error: result.error ?? tc("unknownError"),
+          })
+        );
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(t("deleteDeviceFailed", { error: error.message }));
+    },
+    onSettled: () => {
+      setDeviceToDelete(null);
+    },
+  });
 
   return (
     <DashboardLayout>
@@ -108,8 +162,16 @@ export default function DevicesPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="hover-scale">
-              <RefreshCw className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-scale"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+              />
               {tc("refresh")}
             </Button>
             <AddDeviceDialog>
@@ -246,14 +308,27 @@ export default function DevicesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <DeviceStatusBadge status={device.status} />
+                        <DeviceStatusBadge
+                          status={device.status}
+                          reason={device.statusReason}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="sm" className="hover-scale">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="hover-scale"
+                            onClick={() => setSelectedDevice(device)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="hover-scale text-destructive hover:text-destructive">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="hover-scale text-destructive hover:text-destructive"
+                            onClick={() => setDeviceToDelete(device)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -266,6 +341,59 @@ export default function DevicesPage() {
           </Card>
         )}
       </div>
+      <DeviceDetailDialog
+        open={Boolean(selectedDevice)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedDevice(null);
+          }
+        }}
+        device={selectedDevice}
+      />
+      <AlertDialog
+        open={Boolean(deviceToDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeviceToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{td("deviceDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deviceToDelete
+                ? td("deviceDeleteDescription", { name: deviceToDelete.name })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteDeviceMutation.isPending}>
+              {tc("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                if (!deviceToDelete) {
+                  return;
+                }
+                deleteDeviceMutation.mutate(deviceToDelete);
+              }}
+              disabled={deleteDeviceMutation.isPending}
+            >
+              {deleteDeviceMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {td("deviceDeleting")}
+                </>
+              ) : (
+                tc("delete")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

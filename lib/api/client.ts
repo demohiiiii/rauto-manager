@@ -6,6 +6,7 @@ import type {
   ApiResponse,
   ExecutionHistoryRecord,
   ExecutionHistoryStats,
+  GlobalSearchResults,
 } from "@/lib/types";
 
 class ApiClient {
@@ -64,7 +65,9 @@ class ApiClient {
     return data;
   }
 
-  async checkAgentHealth(id: string): Promise<ApiResponse<{ healthy: boolean }>> {
+  async checkAgentHealth(id: string): Promise<
+    ApiResponse<{ healthy: boolean; agentStatus?: string; payload?: unknown }>
+  > {
     const { data } = await this.client.get(`/agents/${id}/health`);
     return data;
   }
@@ -82,6 +85,13 @@ class ApiClient {
 
   async getDevicesByAgent(agentId: string): Promise<ApiResponse<Device[]>> {
     const { data } = await this.client.get(`/devices?agentId=${agentId}`);
+    return data;
+  }
+
+  async deleteDevice(id: string): Promise<ApiResponse<void>> {
+    const { data } = await this.client.delete("/devices", {
+      params: { id },
+    });
     return data;
   }
 
@@ -125,6 +135,11 @@ class ApiClient {
     }>
   > {
     const { data } = await this.client.get("/history", { params: filters });
+    return data;
+  }
+
+  async search(q: string): Promise<ApiResponse<GlobalSearchResults>> {
+    const { data } = await this.client.get("/search", { params: { q } });
     return data;
   }
 

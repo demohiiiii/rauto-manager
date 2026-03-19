@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { serializeAgent } from "@/lib/utils";
+import { markTimedOutAgents } from "@/lib/agent-timeout";
+import { getEffectiveDeviceStatus } from "@/lib/utils";
 
 export async function GET() {
   try {
+    await markTimedOutAgents();
+
     // Query all dashboard stats in parallel
     const [
       agents,
@@ -29,6 +32,11 @@ export async function GET() {
       prisma.device.findMany({
         select: {
           status: true,
+          agent: {
+            select: {
+              status: true,
+            },
+          },
         },
       }),
 
@@ -90,7 +98,9 @@ export async function GET() {
 
     // Device stats
     const totalDevices = devices.length;
-    const onlineDevices = devices.filter((d) => d.status === "reachable").length;
+    const onlineDevices = devices.filter(
+      (d) => getEffectiveDeviceStatus(d.status, d.agent?.status) === "reachable"
+    ).length;
     const offlineDevices = totalDevices - onlineDevices;
 
     // Today's task stats

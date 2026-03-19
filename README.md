@@ -135,6 +135,7 @@ Required settings:
 Optional but useful:
 
 - `NEXT_PUBLIC_AGENT_API_KEY`: if set, the UI can prefill the agent registration command with the same token.
+- `NEXT_PUBLIC_MANAGER_URL`: if set, the UI uses this public base URL when generating the `rauto agent` command.
 - `AGENT_TIMEOUT`: manager-side timeout for stale agents.
 - `AGENT_HEARTBEAT_INTERVAL`: manager-side heartbeat interval hint shown in settings.
 
@@ -189,6 +190,7 @@ rauto agent \
   --bind 0.0.0.0 \
   --port 8123 \
   --manager-url http://<manager-host>:3000 \
+  --report-mode http \
   --agent-name edge-sh-01 \
   --agent-token <same-agent-api-key>
 ```

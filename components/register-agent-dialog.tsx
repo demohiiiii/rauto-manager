@@ -24,16 +24,18 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Resolve the Manager URL from env vars or the current location
-  const managerUrl = typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.host}`
-    : "http://localhost:3000";
+  const managerUrl =
+    process.env.NEXT_PUBLIC_MANAGER_URL ||
+    (typeof window !== "undefined"
+      ? window.location.origin
+      : "http://localhost:3000");
 
   const apiKey = process.env.NEXT_PUBLIC_AGENT_API_KEY || "rauto-agent-api-key-change-in-production";
 
   // rauto registration command
   const registerCommand = `rauto agent \\
   --manager-url "${managerUrl}" \\
+  --report-mode "http" \\
   --agent-name "my-agent" \\
   --agent-token "${apiKey}"`;
 
@@ -70,8 +72,12 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
             <h4 className="text-sm font-medium">{t("managerConfig")}</h4>
             <div className="grid gap-2 text-sm">
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="text-muted-foreground">Manager URL:</span>
+                <span className="text-muted-foreground">{t("managerUrlLabel")}</span>
                 <code className="text-xs bg-background px-2 py-1 rounded">{managerUrl}</code>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                <span className="text-muted-foreground">{t("reportModeLabel")}</span>
+                <code className="text-xs bg-background px-2 py-1 rounded">http</code>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <span className="text-muted-foreground">API Key:</span>
@@ -119,6 +125,10 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
               <div className="flex gap-2">
                 <Badge variant="outline" className="font-mono">--manager-url</Badge>
                 <span>{t("managerUrlDescription")}</span>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="font-mono">--report-mode</Badge>
+                <span>{t("reportModeDescription")}</span>
               </div>
               <div className="flex gap-2">
                 <Badge variant="outline" className="font-mono">--agent-name</Badge>

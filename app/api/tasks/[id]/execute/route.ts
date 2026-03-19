@@ -79,7 +79,10 @@ export async function POST(
     });
 
     // Build the callback URL from the current request origin
-    const callbackUrl = new URL("/api/tasks/callback", request.nextUrl.origin).toString();
+    const callbackUrl = new URL(
+      "/api/agents/report-task-callback",
+      request.nextUrl.origin
+    ).toString();
 
     const payload = (task.payload ?? {}) as Record<string, unknown>;
     const dispatchType = task.dispatchType as DispatchType;

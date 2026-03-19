@@ -4,7 +4,7 @@ export interface Agent {
   name: string;
   host: string;
   port: number;
-  status: "online" | "offline" | "error";
+  status: "online" | "busy" | "offline" | "error";
   lastHeartbeat: Date;
   capabilities: string[];
   version?: string;
@@ -33,6 +33,7 @@ export interface Device {
   host: string;
   port?: number;
   status: "reachable" | "unreachable" | "unknown";
+  statusReason?: "agent_offline";
   lastChecked?: Date;
   metadata?: Record<string, any>;
   createdAt: Date;
@@ -134,6 +135,54 @@ export interface ExecutionHistoryStats {
   failedCount: number;
   successRate: number;
   averageDuration: number;
+}
+
+// Global search
+export interface SearchAgentResult {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  status: Agent["status"];
+  version?: string;
+  capabilities: string[];
+  lastHeartbeat: Date;
+}
+
+export interface SearchDeviceResult {
+  id: string;
+  name: string;
+  type: string;
+  host: string;
+  port?: number;
+  status: Device["status"];
+  statusReason?: Device["statusReason"];
+  agent?: Device["agent"];
+}
+
+export interface SearchTaskResult {
+  id: string;
+  name: string;
+  description?: string;
+  dispatchType: DispatchType;
+  status: Task["status"];
+  createdAt: Date;
+  agentCount: number;
+}
+
+export interface GlobalSearchResults {
+  query: string;
+  total: number;
+  counts: {
+    agents: number;
+    devices: number;
+    tasks: number;
+    history: number;
+  };
+  agents: SearchAgentResult[];
+  devices: SearchDeviceResult[];
+  tasks: SearchTaskResult[];
+  history: ExecutionHistoryRecord[];
 }
 
 // ===== Unified dispatch types =====

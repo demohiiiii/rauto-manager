@@ -1,6 +1,8 @@
 "use client";
 
-import { Search, Menu } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Menu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -8,8 +10,24 @@ import { NotificationPanel } from "@/components/notification-panel";
 import { useTranslations } from "next-intl";
 
 export function AppHeader() {
+  const router = useRouter();
   const t = useTranslations("nav");
   const tc = useTranslations("common");
+  const [query, setQuery] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedQuery = query.trim();
+    const target = trimmedQuery
+      ? `/search?q=${encodeURIComponent(trimmedQuery)}`
+      : "/search";
+
+    startTransition(() => {
+      router.push(target);
+    });
+  };
 
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-300">
@@ -19,16 +37,33 @@ export function AppHeader() {
       </Button>
 
       {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative group">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
-          <Input
-            type="search"
-            placeholder={t("searchPlaceholder")}
-            className="pl-9 w-full transition-all duration-200 focus:ring-2 focus:ring-primary/20"
-          />
+      <form className="flex-1 max-w-xl" onSubmit={handleSubmit}>
+        <div className="flex items-center gap-2">
+          <div className="relative group flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("searchPlaceholder")}
+              className="pl-9 w-full transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            aria-label={tc("search")}
+          >
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
         </div>
-      </div>
+      </form>
 
       {/* Right Actions */}
       <div className="flex items-center gap-2">

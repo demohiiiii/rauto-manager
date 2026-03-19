@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -110,12 +111,26 @@ function StatsSkeleton() {
   );
 }
 
+function getClickableCardProps(destination: string, navigate: (path: string) => void) {
+  return {
+    onClick: () => navigate(destination),
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        navigate(destination);
+      }
+    },
+    role: "button" as const,
+    tabIndex: 0,
+  };
+}
+
 export default function Home() {
   const router = useRouter();
   const t = useTranslations("dashboard");
   const tc = useTranslations("common");
 
-  const { data, isLoading, error } = useQuery<{ success: boolean; data: DashboardData }>({
+  const { data, isLoading, isFetching, error, refetch } = useQuery<{ success: boolean; data: DashboardData }>({
     queryKey: ["dashboard"],
     queryFn: async () => {
       const res = await fetch("/api/dashboard");
@@ -131,11 +146,25 @@ export default function Home() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="animate-fade-in">
-          <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
-          <p className="text-muted-foreground mt-1">
-            {t("subtitle")}
-          </p>
+        <div className="flex items-center justify-between animate-fade-in">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
+            <p className="text-muted-foreground mt-1">
+              {t("subtitle")}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="hover-scale"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+            />
+            {tc("refresh")}
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -143,13 +172,27 @@ export default function Home() {
           <StatsSkeleton />
         ) : error ? (
           <Card className="border-destructive">
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 flex items-center justify-between gap-4">
               <p className="text-destructive">{tc("loadFailed", { message: (error as Error).message })}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+                />
+                {tc("retry")}
+              </Button>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="hover-lift animate-fade-in stagger-1">
+            <Card
+              {...getClickableCardProps("/agents", (path) => router.push(path))}
+              className="hover-lift animate-fade-in stagger-1 cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   {t("activeAgents")}
@@ -171,7 +214,10 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <Card className="hover-lift animate-fade-in stagger-2">
+            <Card
+              {...getClickableCardProps("/devices", (path) => router.push(path))}
+              className="hover-lift animate-fade-in stagger-2 cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   {t("managedDevices")}
@@ -192,7 +238,10 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <Card className="hover-lift animate-fade-in stagger-3">
+            <Card
+              {...getClickableCardProps("/tasks", (path) => router.push(path))}
+              className="hover-lift animate-fade-in stagger-3 cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   {t("todayTasks")}

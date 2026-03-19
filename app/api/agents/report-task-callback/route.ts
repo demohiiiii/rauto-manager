@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import type { ApiResponse, AgentOfflineInput } from "@/lib/types";
+import type { ApiResponse, TaskCallbackInput } from "@/lib/types";
 import { validateAgentApiKey, unauthorizedResponse } from "@/lib/agent-auth";
-import { notifyOffline } from "@/lib/agent-reporting";
+import { reportTaskCallback } from "@/lib/agent-reporting";
 import {
   AGENT_REPORTING_HEADERS,
   agentReportingErrorResponse,
@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body: AgentOfflineInput = await request.json();
-    await notifyOffline(body);
+    const body: TaskCallbackInput = await request.json();
+    await reportTaskCallback(body);
 
     const response: ApiResponse<null> = { success: true };
     return agentReportingJson(response);

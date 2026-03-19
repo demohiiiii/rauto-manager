@@ -135,6 +135,7 @@ cp .env.example .env
 建议补充：
 
 - `NEXT_PUBLIC_AGENT_API_KEY`：如果设置，前端弹窗里可直接生成带 token 的 Agent 注册命令。
+- `NEXT_PUBLIC_MANAGER_URL`：如果设置，前端会用这个公开地址生成 `rauto agent` 启动命令。
 - `AGENT_TIMEOUT`：Manager 侧判定 Agent 失活的超时时间。
 - `AGENT_HEARTBEAT_INTERVAL`：Manager 侧展示和配置使用的心跳间隔提示值。
 
@@ -163,6 +164,7 @@ rauto agent \
   --bind 0.0.0.0 \
   --port 8123 \
   --manager-url http://<manager-host>:3000 \
+  --report-mode http \
   --agent-name edge-sh-01 \
   --agent-token <same-agent-api-key>
 ```

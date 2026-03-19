@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { serializeAgent } from "@/lib/utils";
+import { markTimedOutAgents } from "@/lib/agent-timeout";
+import { getEffectiveDeviceState, serializeAgent } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   try {
+    await markTimedOutAgents();
+
     const searchParams = request.nextUrl.searchParams;
     const agentId = searchParams.get("agentId");
 
@@ -19,10 +22,15 @@ export async function GET(request: NextRequest) {
     });
 
     // Agent objects include BigInt fields, so serialize them before returning JSON
-    const serializable = devices.map((d) => ({
-      ...d,
-      agent: serializeAgent(d.agent),
-    }));
+    const serializable = devices.map((d) => {
+      const effectiveState = getEffectiveDeviceState(d.status, d.agent?.status);
+
+      return {
+        ...d,
+        ...effectiveState,
+        agent: serializeAgent(d.agent),
+      };
+    });
 
     const response: ApiResponse<typeof serializable> = {
       success: true,

@@ -117,7 +117,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Build the callback URL from the current request origin
-    const callbackUrl = new URL("/api/tasks/callback", request.nextUrl.origin).toString();
+    const callbackUrl = new URL(
+      "/api/agents/report-task-callback",
+      request.nextUrl.origin
+    ).toString();
 
     try {
       // Call the agent

@@ -1,90 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { validateAgentApiKey, unauthorizedResponse } from "@/lib/agent-auth";
-import { prisma } from "@/lib/prisma";
-
-interface DeviceStatus {
-  name: string;
-  host: string;
-  reachable: boolean;
-}
-
-interface UpdateDeviceStatusBody {
-  name: string; // agent name
-  devices: DeviceStatus[];
-}
+import {
+  updateDeviceStatuses,
+  type UpdateDeviceStatusInput,
+} from "@/lib/agent-reporting";
+import {
+  AGENT_REPORTING_HEADERS,
+  agentReportingErrorResponse,
+  agentReportingJson,
+} from "@/lib/agent-reporting-http";
 
 export async function POST(request: NextRequest) {
   if (!validateAgentApiKey(request)) {
-    return unauthorizedResponse();
+    return unauthorizedResponse(AGENT_REPORTING_HEADERS);
   }
 
   try {
-    const body: UpdateDeviceStatusBody = await request.json();
-
-    if (!body.name) {
-      return NextResponse.json(
-        { success: false, error: "缺少必填字段: name" },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(body.devices)) {
-      return NextResponse.json(
-        { success: false, error: "缺少必填字段: devices (数组)" },
-        { status: 400 }
-      );
-    }
-
-    // Look up the agent
-    const agent = await prisma.agent.findUnique({
-      where: { name: body.name },
-    });
-
-    if (!agent) {
-      return NextResponse.json(
-        { success: false, error: `Agent 不存在: ${body.name}` },
-        { status: 404 }
-      );
-    }
-
-    // Update device status in batches
-    const updatedCount = await prisma.$transaction(async (tx) => {
-      let count = 0;
-
-      for (const device of body.devices) {
-        const status = device.reachable ? "reachable" : "unreachable";
-
-        // Find the device by name + host
-        const result = await tx.device.updateMany({
-          where: {
-            agentId: agent.id,
-            name: device.name,
-            host: device.host,
-          },
-          data: {
-            status,
-            lastChecked: new Date(),
-          },
-        });
-
-        count += result.count;
-      }
-
-      return count;
-    });
+    const body: UpdateDeviceStatusInput = await request.json();
+    const result = await updateDeviceStatuses(body);
 
     const response: ApiResponse<{ updated: number }> = {
       success: true,
-      data: { updated: updatedCount },
+      data: result,
     };
 
-    return NextResponse.json(response);
+    return agentReportingJson(response);
   } catch (error) {
-    const response: ApiResponse<never> = {
-      success: false,
-      error: error instanceof Error ? error.message : "设备状态更新失败",
-    };
-    return NextResponse.json(response, { status: 500 });
+    return agentReportingErrorResponse(error);
   }
 }
