@@ -66,6 +66,7 @@ const STATUS_BADGE_KEYS: Record<string, { variant: "default" | "secondary" | "de
   success: { variant: "default", labelKey: "success" },
   failed: { variant: "destructive", labelKey: "failed" },
   running: { variant: "secondary", labelKey: "running" },
+  queued: { variant: "outline", labelKey: "queued" },
   pending: { variant: "outline", labelKey: "pending" },
 };
 

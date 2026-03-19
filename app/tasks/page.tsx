@@ -68,6 +68,12 @@ function TaskStatusBadge({ status }: { status: Task["status"] }) {
       icon: Clock,
       className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
     },
+    queued: {
+      labelKey: "statusQueued",
+      variant: "secondary" as const,
+      icon: Clock,
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    },
     running: {
       labelKey: "statusRunning",
       variant: "default" as const,
@@ -147,6 +153,8 @@ export default function TasksPage() {
   } | null>(null);
 
   const queryClient = useQueryClient();
+  const isActiveTask = (task: Task) =>
+    task.status === "queued" || task.status === "running";
 
   // Query the task list and auto-poll while tasks are running
   const { data, isLoading, error, refetch } = useQuery({
@@ -154,8 +162,7 @@ export default function TasksPage() {
     queryFn: () => apiClient.getTasks(),
     refetchInterval: (query) => {
       const tasks = query.state.data?.data ?? [];
-      const hasRunning = tasks.some((t: Task) => t.status === "running");
-      return hasRunning ? 5000 : false;
+      return tasks.some(isActiveTask) ? 5000 : false;
     },
   });
 
@@ -164,10 +171,15 @@ export default function TasksPage() {
   // Execute-task mutation
   const executeMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.executeTask(taskId),
-    onSuccess: (result) => {
+    onSuccess: (result, taskId) => {
       if (result.success) {
-        toast.success(t("taskStarted"));
+        toast.success(
+          result.data?.task_status === "queued"
+            ? t("taskQueued")
+            : t("taskStarted")
+        );
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       } else {
         toast.error(t("executeFailed", { error: result.error ?? "" }));
       }
@@ -180,10 +192,11 @@ export default function TasksPage() {
   // Cancel-task mutation
   const cancelMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.cancelTask(taskId),
-    onSuccess: (result) => {
+    onSuccess: (result, taskId) => {
       if (result.success) {
         toast.success(t("taskCancelled"));
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       } else {
         toast.error(t("cancelFailed", { error: result.error ?? "" }));
       }
@@ -268,7 +281,7 @@ export default function TasksPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {tasks.filter((t) => t.status === "running").length}
+                {tasks.filter(isActiveTask).length}
               </div>
             </CardContent>
           </Card>
@@ -392,7 +405,9 @@ export default function TasksPage() {
                         {t("execute")}
                       </Button>
                     )}
-                    {(task.status === "running" || task.status === "pending") && (
+                    {(task.status === "running" ||
+                      task.status === "queued" ||
+                      task.status === "pending") && (
                       <Button
                         variant="destructive"
                         size="sm"

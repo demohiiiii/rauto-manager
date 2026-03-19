@@ -40,6 +40,7 @@ import {
 import type { Agent } from "@/lib/types";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 function AgentStatusBadge({ status }: { status: Agent["status"] }) {
   const t = useTranslations("agents");
@@ -216,7 +217,7 @@ export default function AgentsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {agents.filter((a) => a.status === "online").length}
+                {agents.filter((a) => isAgentAvailableStatus(a.status)).length}
               </div>
             </CardContent>
           </Card>

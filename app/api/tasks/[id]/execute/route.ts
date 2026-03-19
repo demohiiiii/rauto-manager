@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { dispatchToAgent } from "@/lib/dispatch";
+import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
 import { createNotification } from "@/lib/notification";
 import type { DispatchType } from "@/lib/types";
+import type { Prisma } from "@prisma/client";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 /**
  * POST /api/tasks/[id]/execute
@@ -59,7 +61,7 @@ export async function POST(
       );
     }
 
-    if (agent.status !== "online" && agent.status !== "busy") {
+    if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         {
           success: false,
@@ -69,13 +71,36 @@ export async function POST(
       );
     }
 
-    // Mark the task as running
-    const updatedTask = await prisma.task.update({
-      where: { id },
-      data: {
-        status: "running",
-        startedAt: new Date(),
-      },
+    const dispatchType = task.dispatchType as DispatchType;
+    const asyncDispatch = isAsyncDispatchType(dispatchType);
+
+    // Record that manager has started the dispatch flow.
+    await prisma.$transaction(async (tx) => {
+      if (!asyncDispatch) {
+        await tx.task.update({
+          where: { id },
+          data: {
+            status: "running",
+            startedAt: new Date(),
+          },
+        });
+      }
+
+      await tx.taskExecutionEvent.create({
+        data: {
+          taskId: task.id,
+          agentId: agent.id,
+          agentName: agent.name,
+          eventType: "dispatching",
+          level: "info",
+          stage: "manager",
+          message: t("tasks.eventDispatching", { name: agent.name }),
+          progress: 0,
+          details: {
+            dispatchType,
+          },
+        },
+      });
     });
 
     // Build the callback URL from the current request origin
@@ -85,7 +110,6 @@ export async function POST(
     ).toString();
 
     const payload = (task.payload ?? {}) as Record<string, unknown>;
-    const dispatchType = task.dispatchType as DispatchType;
 
     // Extract connection if it exists inside the payload
     const connection = payload.connection as
@@ -98,7 +122,7 @@ export async function POST(
     const { connection: _conn, dry_run: _dry, record_level: _rec, ...purePayload } = payload;
 
     try {
-      await dispatchToAgent({
+      const dispatchResult = await dispatchToAgent({
         agent: { host: agent.host, port: agent.port },
         type: dispatchType,
         taskId: task.id,
@@ -107,6 +131,43 @@ export async function POST(
         payload: purePayload,
         dryRun: dryRun,
         recordLevel: recordLevel,
+      });
+
+      const taskStatus = dispatchResult.executionMode === "async" ? "queued" : "running";
+
+      await prisma.$transaction(async (tx) => {
+        if (dispatchResult.executionMode === "async") {
+          await tx.task.updateMany({
+            where: {
+              id: task.id,
+              status: "pending",
+            },
+            data: {
+              status: "queued",
+            },
+          });
+        }
+
+        await tx.taskExecutionEvent.create({
+          data: {
+            taskId: task.id,
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: dispatchResult.executionMode === "async" ? "queued" : "dispatched",
+            level: "info",
+            stage: "manager",
+            message:
+              dispatchResult.executionMode === "async"
+                ? t("tasks.eventAccepted", { name: agent.name })
+                : t("tasks.eventDispatched", { name: agent.name }),
+            progress: dispatchResult.executionMode === "async" ? 5 : 10,
+            details: {
+              dispatchType,
+              executionMode: dispatchResult.executionMode,
+              agentResponse: dispatchResult.response,
+            } as Prisma.InputJsonValue,
+          },
+        });
       });
 
       // Notification: task execution started
@@ -123,43 +184,74 @@ export async function POST(
           agentId: agent.id,
           agentName: agent.name,
           dispatchType,
+          executionMode: dispatchResult.executionMode,
         },
       }).catch(() => {});
 
-      const response: ApiResponse<{ task_id: string; dispatched: boolean }> = {
+      const response: ApiResponse<{
+        task_id: string;
+        accepted: boolean;
+        dispatched: boolean;
+        agent_name: string;
+        dispatch_type: DispatchType;
+        task_status: "queued" | "running";
+        execution_mode: "sync" | "async";
+      }> = {
         success: true,
         data: {
           task_id: task.id,
+          accepted: true,
           dispatched: true,
+          agent_name: agent.name,
+          dispatch_type: dispatchType,
+          task_status: taskStatus,
+          execution_mode: dispatchResult.executionMode,
         },
       };
 
       return NextResponse.json(response);
     } catch (dispatchError) {
       const t = await getSystemTranslator();
+      const dispatchErrorMessage =
+        dispatchError instanceof Error
+          ? dispatchError.message
+          : t("common.saveFailed");
       // If the agent call fails, mark the task as failed
-      await prisma.task.update({
-        where: { id },
-        data: {
-          status: "failed",
-          completedAt: new Date(),
-          result: {
-            success: false,
-            error:
-              dispatchError instanceof Error
-                ? dispatchError.message
-                : t("common.saveFailed"),
+      await prisma.$transaction([
+        prisma.task.update({
+          where: { id },
+          data: {
+            status: "failed",
+            completedAt: new Date(),
+            result: {
+              success: false,
+              error: dispatchErrorMessage,
+            },
           },
-        },
-      });
+        }),
+        prisma.taskExecutionEvent.create({
+          data: {
+            taskId: task.id,
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: "failed",
+            level: "error",
+            stage: "manager",
+            message: t("tasks.eventDispatchFailed", {
+              name: agent.name,
+              error: dispatchErrorMessage,
+            }),
+            details: {
+              dispatchType,
+            },
+          },
+        }),
+      ]);
 
       return NextResponse.json(
         {
           success: false,
-          error:
-            dispatchError instanceof Error
-              ? dispatchError.message
-              : t("common.saveFailed"),
+          error: dispatchErrorMessage,
         },
         { status: 502 }
       );

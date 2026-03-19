@@ -25,7 +25,11 @@ export async function POST(
       );
     }
 
-    if (task.status !== "pending" && task.status !== "running") {
+    if (
+      task.status !== "pending" &&
+      task.status !== "queued" &&
+      task.status !== "running"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -35,15 +39,29 @@ export async function POST(
       );
     }
 
-    const updatedTask = await prisma.task.update({
-      where: { id },
-      data: {
-        status: "cancelled",
-        completedAt: new Date(),
-      },
-      include: {
-        agents: true,
-      },
+    const updatedTask = await prisma.$transaction(async (tx) => {
+      const updated = await tx.task.update({
+        where: { id },
+        data: {
+          status: "cancelled",
+          completedAt: new Date(),
+        },
+        include: {
+          agents: true,
+        },
+      });
+
+      await tx.taskExecutionEvent.create({
+        data: {
+          taskId: task.id,
+          eventType: "cancelled",
+          level: "warning",
+          stage: "manager",
+          message: t("tasks.eventCancelled"),
+        },
+      });
+
+      return updated;
     });
 
     // Create a notification

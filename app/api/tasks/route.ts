@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
+import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 export async function GET() {
   try {
@@ -39,20 +40,36 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const t = await getSystemTranslator();
 
-    const newTask = await prisma.task.create({
-      data: {
-        name: body.name,
-        description: body.description,
-        agentIds: body.agentIds || [],
-        deviceIds: body.deviceIds || [],
-        template: body.template,
-        variables: body.variables || {},
-        status: "pending",
-      },
-      include: {
-        agents: true,
-      },
+    const newTask = await prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          name: body.name,
+          description: body.description,
+          agentIds: body.agentIds || [],
+          deviceIds: body.deviceIds || [],
+          template: body.template,
+          variables: body.variables || {},
+          status: "pending",
+        },
+        include: {
+          agents: true,
+        },
+      });
+
+      await tx.taskExecutionEvent.create({
+        data: {
+          taskId: createdTask.id,
+          eventType: "queued",
+          level: "info",
+          stage: "manager",
+          message: t("tasks.eventQueued"),
+          progress: 0,
+        },
+      });
+
+      return createdTask;
     });
 
     const response: ApiResponse<typeof newTask> = {

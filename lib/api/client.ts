@@ -3,6 +3,8 @@ import type {
   Agent,
   Device,
   Task,
+  TaskDetail,
+  TaskDispatchResponse,
   ApiResponse,
   ExecutionHistoryRecord,
   ExecutionHistoryStats,
@@ -101,7 +103,7 @@ class ApiClient {
     return data;
   }
 
-  async getTask(id: string): Promise<ApiResponse<Task>> {
+  async getTask(id: string): Promise<ApiResponse<TaskDetail>> {
     const { data } = await this.client.get(`/tasks/${id}`);
     return data;
   }
@@ -111,7 +113,7 @@ class ApiClient {
     return data;
   }
 
-  async executeTask(id: string): Promise<ApiResponse<Task>> {
+  async executeTask(id: string): Promise<ApiResponse<TaskDispatchResponse>> {
     const { data } = await this.client.post(`/tasks/${id}/execute`);
     return data;
   }
@@ -144,7 +146,7 @@ class ApiClient {
   }
 
   // Dispatch API
-  async dispatch(body: Record<string, unknown>): Promise<ApiResponse<{ task_id: string; dispatched: boolean; agent_name: string; dispatch_type: string }>> {
+  async dispatch(body: Record<string, unknown>): Promise<ApiResponse<TaskDispatchResponse>> {
     const { data } = await this.client.post("/dispatch", body);
     return data;
   }

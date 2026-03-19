@@ -26,6 +26,10 @@ export function getEffectiveDeviceStatus(
   return getEffectiveDeviceState(deviceStatus, agentStatus).status;
 }
 
+export function isAgentAvailableStatus(status?: string | null): boolean {
+  return status === "online" || status === "busy";
+}
+
 export function getEffectiveDeviceState(
   deviceStatus: Device["status"] | string,
   agentStatus?: string | null
@@ -41,7 +45,7 @@ export function getEffectiveDeviceState(
     return { status: normalized };
   }
 
-  if (agentStatus !== "online" && agentStatus !== "busy") {
+  if (!isAgentAvailableStatus(agentStatus)) {
     return {
       status: "unreachable",
       statusReason: "agent_offline",

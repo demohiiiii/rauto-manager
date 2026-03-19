@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import { markTimedOutAgents } from "@/lib/agent-timeout";
-import { getEffectiveDeviceStatus } from "@/lib/utils";
+import { getEffectiveDeviceStatus, isAgentAvailableStatus } from "@/lib/utils";
 
 export async function GET() {
   try {
@@ -93,7 +93,7 @@ export async function GET() {
     ]);
 
     // Agent stats
-    const onlineAgents = agents.filter((a) => a.status === "online");
+    const onlineAgents = agents.filter((a) => isAgentAvailableStatus(a.status));
     const activeAgentCount = onlineAgents.length;
 
     // Device stats
@@ -111,7 +111,9 @@ export async function GET() {
     // Task stats for the last 7 days
     const weekTotal = weekTasks.length;
     const weekSuccess = weekTasks.filter((t) => t.status === "success").length;
-    const weekRunning = weekTasks.filter((t) => t.status === "running").length;
+    const weekRunning = weekTasks.filter(
+      (t) => t.status === "queued" || t.status === "running"
+    ).length;
     const weekFailed = weekTasks.filter((t) => t.status === "failed").length;
 
     // Calculate system health from the online agent ratio and task success rate

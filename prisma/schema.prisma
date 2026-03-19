@@ -74,6 +74,7 @@ model Task {
   agents Agent[]
 
   executionHistory ExecutionHistory[]
+  executionEvents  TaskExecutionEvent[]
 
   @@index([status])
   @@index([createdAt])
@@ -94,6 +95,26 @@ model ExecutionHistory {
 
   @@index([taskId])
   @@index([agentId])
+  @@index([createdAt])
+}
+
+model TaskExecutionEvent {
+  id        String   @id @default(uuid())
+  taskId     String
+  agentId    String?
+  agentName  String?
+  eventType  String
+  level      String   @default("info")
+  stage      String?
+  message    String
+  progress   Int?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([eventType])
   @@index([createdAt])
 }
 
@@ -154,4 +175,3 @@ model AgentErrorReport {
   @@index([severity])
   @@index([category])
 }
-

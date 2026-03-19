@@ -87,6 +87,12 @@ function SearchStatusBadge({
       icon: Clock,
       className: "",
     },
+    queued: {
+      labelKey: "statusQueued",
+      variant: "secondary" as const,
+      icon: Clock,
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    },
     running: {
       labelKey: "statusRunning",
       variant: "default" as const,

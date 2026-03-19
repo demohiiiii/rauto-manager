@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 interface AddDeviceDialogProps {
   children: React.ReactNode;
@@ -53,13 +54,15 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     sshSecurity: "balanced" as "secure" | "balanced" | "legacy-compatible",
   });
 
-  // Fetch the online agent list
+  // Fetch the available agent list
   const { data: agentsData } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
   });
 
-  const onlineAgents = (agentsData?.data ?? []).filter((a) => a.status === "online");
+  const availableAgents = (agentsData?.data ?? []).filter((a) =>
+    isAgentAvailableStatus(a.status)
+  );
 
   // When an agent is selected, fetch its supported device profiles through the Manager proxy
   useEffect(() => {
@@ -241,10 +244,10 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
                 <SelectValue placeholder={t("selectOnlineAgent")} />
               </SelectTrigger>
               <SelectContent>
-                {onlineAgents.length === 0 ? (
+                {availableAgents.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">{t("noOnlineAgents")}</div>
                 ) : (
-                  onlineAgents.map((agent) => (
+                  availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name} ({agent.host}:{agent.port})
                     </SelectItem>

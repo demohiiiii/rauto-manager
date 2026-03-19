@@ -63,12 +63,33 @@ export interface Task {
   variables: Record<string, any>;
   dispatchType: DispatchType;
   payload: Record<string, any>;
-  status: "pending" | "running" | "success" | "failed" | "cancelled";
+  status: "pending" | "queued" | "running" | "success" | "failed" | "cancelled";
   result?: TaskResult;
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;
   completedAt?: Date;
+}
+
+export type TaskExecutionEventLevel = "info" | "success" | "warning" | "error";
+
+export interface TaskExecutionEvent {
+  id: string;
+  taskId: string;
+  agentId?: string | null;
+  agentName?: string | null;
+  eventType: string;
+  level: TaskExecutionEventLevel;
+  stage?: string | null;
+  message: string;
+  progress?: number | null;
+  details?: Record<string, any> | string | number | boolean | null;
+  createdAt: Date;
+}
+
+export interface TaskDetail extends Task {
+  executionHistory: ExecutionHistory[];
+  executionEvents: TaskExecutionEvent[];
 }
 
 export interface TaskResult {
@@ -85,6 +106,16 @@ export interface TaskCreateInput {
   deviceIds?: string[];
   template: string;
   variables?: Record<string, any>;
+}
+
+export interface TaskDispatchResponse {
+  task_id: string;
+  accepted: boolean;
+  dispatched: boolean;
+  agent_name: string;
+  dispatch_type: DispatchType;
+  task_status: Task["status"];
+  execution_mode: "sync" | "async";
 }
 
 // API response types
@@ -248,6 +279,18 @@ export interface TaskCallbackInput {
   execution_time_ms?: number;
   result?: Record<string, unknown>;
   error?: string;
+}
+
+export interface TaskExecutionEventInput {
+  task_id: string;
+  agent_name: string;
+  event_type: string;
+  message: string;
+  level?: TaskExecutionEventLevel;
+  stage?: string;
+  progress?: number;
+  details?: Record<string, unknown>;
+  occurred_at?: string;
 }
 
 // ===== Notification system types =====

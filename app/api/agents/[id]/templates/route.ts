@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 const AGENT_TIMEOUT_MS = 10000;
 
@@ -26,7 +27,7 @@ export async function GET(
       );
     }
 
-    if (agent.status !== "online") {
+    if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         { success: false, error: "Agent 当前不在线" },
         { status: 400 }

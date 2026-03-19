@@ -2,23 +2,28 @@ import type { DispatchType } from "@/lib/types";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
+const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
+  "tx_block",
+  "tx_workflow",
+  "orchestrate",
+]);
 
 // Map dispatch types to rauto Agent API endpoints
 const DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
   exec: "/api/exec",
   template: "/api/template/execute",
-  tx_block: "/api/tx/block",
-  tx_workflow: "/api/tx/workflow",
-  orchestrate: "/api/orchestrate",
+  tx_block: "/api/tx/block/async",
+  tx_workflow: "/api/tx/workflow/async",
+  orchestrate: "/api/orchestrate/async",
 };
 
 // Timeout settings: exec is usually faster, other types may take longer
 const DISPATCH_TIMEOUT_MAP: Record<DispatchType, number> = {
   exec: 30_000,
   template: 60_000,
-  tx_block: 60_000,
-  tx_workflow: 120_000,
-  orchestrate: 120_000,
+  tx_block: 15_000,
+  tx_workflow: 15_000,
+  orchestrate: 15_000,
 };
 
 interface AgentInfo {
@@ -35,6 +40,14 @@ interface DispatchOptions {
   payload: Record<string, unknown>;
   dryRun?: boolean;
   recordLevel?: string;
+}
+
+export type AgentDispatchExecutionMode = "sync" | "async";
+
+export interface AgentDispatchResult {
+  response: Record<string, unknown>;
+  statusCode: number;
+  executionMode: AgentDispatchExecutionMode;
 }
 
 // RecordLevel uses PascalCase in Manager and kebab-case in rauto Agent
@@ -75,17 +88,45 @@ function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
   return base;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readAgentResponseBody(
+  response: Response
+): Promise<Record<string, unknown>> {
+  const text = await response.text().catch(() => "");
+
+  if (!text.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : { data: parsed };
+  } catch {
+    return { raw: text };
+  }
+}
+
+export function isAsyncDispatchType(type: DispatchType): boolean {
+  return ASYNC_DISPATCH_TYPES.has(type);
+}
+
 /**
  * Send a dispatch request to the agent.
  * Return the agent response on success or throw on failure.
  */
 export async function dispatchToAgent(
   options: DispatchOptions
-): Promise<Record<string, unknown>> {
+): Promise<AgentDispatchResult> {
   const { agent, type } = options;
 
   const endpoint = DISPATCH_ENDPOINT_MAP[type];
   const timeoutMs = DISPATCH_TIMEOUT_MAP[type];
+  const executionMode: AgentDispatchExecutionMode = isAsyncDispatchType(type)
+    ? "async"
+    : "sync";
   const url = `http://${agent.host}:${agent.port}${endpoint}`;
   const body = buildAgentPayload(options);
 
@@ -107,5 +148,16 @@ export async function dispatchToAgent(
     );
   }
 
-  return response.json();
+  if (executionMode === "async" && response.status !== 202) {
+    const t = await getSystemTranslator();
+    throw new Error(
+      `Agent ${t(`tasks.dispatchType.${type}`)} 未按异步协议返回 202 Accepted，实际返回 ${response.status}`
+    );
+  }
+
+  return {
+    response: await readAgentResponseBody(response),
+    statusCode: response.status,
+    executionMode,
+  };
 }

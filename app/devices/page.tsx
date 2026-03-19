@@ -49,6 +49,7 @@ import {
 import type { Device } from "@/lib/types";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 function DeviceStatusBadge({
   status,
@@ -299,7 +300,7 @@ export default function DevicesPage() {
                         <div className="flex items-center gap-2">
                           <Server className="h-3 w-3 text-muted-foreground" />
                           <span className="text-sm">{device.agent?.name || tc("unknown")}</span>
-                          {device.agent?.status === "online" && (
+                          {isAgentAvailableStatus(device.agent?.status) && (
                             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" title="在线" />
                           )}
                           {device.agent?.status === "offline" && (

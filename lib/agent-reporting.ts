@@ -7,6 +7,7 @@ import type {
   AgentHeartbeatInput,
   AgentOfflineInput,
   AgentRegisterInput,
+  TaskExecutionEventLevel,
 } from "@/lib/types";
 
 export type AgentReportingErrorCode =
@@ -77,6 +78,19 @@ export interface TaskCallbackReportInput {
   error?: string | null;
 }
 
+export interface TaskExecutionEventReportInput {
+  task_id: string;
+  agent_name: string;
+  event_type: string;
+  message: string;
+  level?: TaskExecutionEventLevel;
+  stage?: string;
+  progress?: number;
+  details?: unknown;
+  details_json?: string | null;
+  occurred_at?: string;
+}
+
 function reportingError(
   code: AgentReportingErrorCode,
   message: string
@@ -137,6 +151,21 @@ function parseOptionalJson(
   }
 }
 
+function parseOptionalProgress(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isFinite(value)) {
+    throw reportingError(
+      "INVALID_ARGUMENT",
+      "Field progress must be a finite number"
+    );
+  }
+
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
 function toOptionalPort(value: number | undefined): number | null {
   if (!value || value <= 0) {
     return null;
@@ -169,6 +198,74 @@ function normalizeInputJsonValue(
       `Field ${field} must be JSON-serializable`
     );
   }
+}
+
+function asJsonObject(
+  value: Prisma.InputJsonValue | undefined
+): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function getObjectString(
+  value: Record<string, unknown> | null,
+  key: string
+): string | undefined {
+  const candidate = value?.[key];
+  return typeof candidate === "string" && candidate.trim()
+    ? candidate.trim()
+    : undefined;
+}
+
+function getObjectNumber(
+  value: Record<string, unknown> | null,
+  key: string
+): number | undefined {
+  const candidate = value?.[key];
+  return typeof candidate === "number" && Number.isFinite(candidate)
+    ? candidate
+    : undefined;
+}
+
+function shouldMarkTaskFailedFromErrorReport(
+  input: AgentErrorReportInput,
+  details: Prisma.InputJsonValue | undefined
+): {
+  shouldMarkFailed: boolean;
+  startedAt?: Date;
+  completedAt?: Date;
+  executionTimeMs?: number;
+  errorMessage?: string;
+} {
+  if (!input.task_id?.trim() || input.severity !== "error") {
+    return { shouldMarkFailed: false };
+  }
+
+  const detailObject = asJsonObject(details);
+  const taskStatus = getObjectString(detailObject, "task_status");
+
+  if (taskStatus !== "failed") {
+    return { shouldMarkFailed: false };
+  }
+
+  const startedAtValue = getObjectString(detailObject, "started_at");
+  const completedAtValue = getObjectString(detailObject, "completed_at");
+  const executionTimeMs = getObjectNumber(detailObject, "execution_time_ms");
+
+  return {
+    shouldMarkFailed: true,
+    startedAt: parseOptionalDate(startedAtValue, "details.started_at"),
+    completedAt: parseOptionalDate(
+      completedAtValue,
+      "details.completed_at"
+    ),
+    executionTimeMs:
+      executionTimeMs !== undefined ? Math.max(0, Math.round(executionTimeMs)) : undefined,
+    errorMessage: input.message?.trim() || input.kind,
+  };
 }
 
 function summarizeTaskCommand(task: {
@@ -468,7 +565,7 @@ export async function updateDeviceStatuses(
 
 export async function reportAgentError(
   input: AgentErrorReportInput
-): Promise<{ eventId: string }> {
+): Promise<{ eventId: string; taskMarkedFailed: boolean }> {
   const name = requireString(input.name, "name");
   const category = requireString(input.category, "category");
   const kind = requireString(input.kind, "kind");
@@ -490,29 +587,261 @@ export async function reportAgentError(
     normalizeInputJsonValue(input.details, "details") ??
     parseOptionalJson(input.details_json, "details_json") ??
     {};
+  const fallbackTaskFailure = shouldMarkTaskFailedFromErrorReport(input, details);
+  const t = await getSystemTranslator();
 
   const eventId = `err_${nanoid(16)}`;
 
-  await prisma.agentErrorReport.create({
-    data: {
-      eventId,
-      agentName: name,
-      category,
-      kind,
-      severity,
-      occurredAt,
-      taskId: input.task_id?.trim() || null,
-      operation: input.operation?.trim() || null,
-      targetUrl: input.target_url?.trim() || null,
-      httpMethod: input.http_method?.trim() || null,
-      httpStatus: input.http_status ?? null,
-      retryable: input.retryable ?? null,
-      message: input.message?.trim() || "",
-      details,
-    },
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.agentErrorReport.create({
+      data: {
+        eventId,
+        agentName: name,
+        category,
+        kind,
+        severity,
+        occurredAt,
+        taskId: input.task_id?.trim() || null,
+        operation: input.operation?.trim() || null,
+        targetUrl: input.target_url?.trim() || null,
+        httpMethod: input.http_method?.trim() || null,
+        httpStatus: input.http_status ?? null,
+        retryable: input.retryable ?? null,
+        message: input.message?.trim() || "",
+        details,
+      },
+    });
+
+    const taskId = input.task_id?.trim();
+    if (!taskId) {
+      return { taskMarkedFailed: false, taskName: null as string | null };
+    }
+
+    const [task, agent] = await Promise.all([
+      tx.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          startedAt: true,
+          dispatchType: true,
+          template: true,
+          payload: true,
+        },
+      }),
+      tx.agent.findUnique({
+        where: { name },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    if (!task) {
+      return { taskMarkedFailed: false, taskName: null as string | null };
+    }
+
+    await tx.taskExecutionEvent.create({
+      data: {
+        taskId: task.id,
+        agentId: agent?.id ?? null,
+        agentName: agent?.name ?? name,
+        eventType: "error_reported",
+        level: severity as TaskExecutionEventLevel,
+        stage: input.operation?.trim() || "report_error",
+        message: t("tasks.eventAgentErrorReported", {
+          name,
+          kind,
+          error: input.message?.trim() || kind,
+        }),
+        details: {
+          category,
+          kind,
+          retryable: input.retryable,
+          targetUrl: input.target_url?.trim() || null,
+          httpMethod: input.http_method?.trim() || null,
+          httpStatus: input.http_status ?? null,
+          errorReport: details,
+        },
+        createdAt: occurredAt,
+      },
+    });
+
+    if (
+      !fallbackTaskFailure.shouldMarkFailed ||
+      !["pending", "queued", "running"].includes(task.status)
+    ) {
+      return { taskMarkedFailed: false, taskName: task.name };
+    }
+
+    const failureMessage =
+      fallbackTaskFailure.errorMessage ||
+      t("tasks.fallbackTaskFailureFromErrorReport");
+
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        status: "failed",
+        startedAt: task.startedAt ?? fallbackTaskFailure.startedAt,
+        completedAt: fallbackTaskFailure.completedAt ?? occurredAt,
+        result: {
+          success: false,
+          error: failureMessage,
+        },
+      },
+    });
+
+    await tx.taskExecutionEvent.create({
+      data: {
+        taskId: task.id,
+        agentId: agent?.id ?? null,
+        agentName: agent?.name ?? name,
+        eventType: "failed",
+        level: "error",
+        stage: input.operation?.trim() || "report_error",
+        message: t("tasks.eventMarkedFailedFromErrorReport", {
+          name,
+        }),
+        progress: 100,
+        details: {
+          source: "agent_error_report",
+          kind,
+          category,
+          executionTimeMs: fallbackTaskFailure.executionTimeMs ?? null,
+        },
+        createdAt: fallbackTaskFailure.completedAt ?? occurredAt,
+      },
+    });
+
+    return { taskMarkedFailed: true, taskName: task.name };
   });
 
-  return { eventId };
+  if (outcome.taskMarkedFailed && outcome.taskName) {
+    createNotification({
+      type: "task_failed",
+      title: t("notifications.taskFailed"),
+      message: t("notifications.taskCompletedFailed", {
+        name,
+        taskName: outcome.taskName,
+        error:
+          fallbackTaskFailure.errorMessage ||
+          t("tasks.fallbackTaskFailureFromErrorReport"),
+      }),
+      level: "error",
+      metadata: {
+        taskId: input.task_id?.trim() || null,
+        agentName: name,
+        source: "agent_error_report",
+        kind,
+      },
+    }).catch(() => {});
+  }
+
+  return { eventId, taskMarkedFailed: outcome.taskMarkedFailed };
+}
+
+export async function reportTaskExecutionEvent(
+  input: TaskExecutionEventReportInput
+): Promise<void> {
+  const taskId = requireString(input.task_id, "task_id");
+  const agentName = requireString(input.agent_name, "agent_name");
+  const eventType = requireString(input.event_type, "event_type");
+  const message = requireString(input.message, "message");
+  const occurredAt = parseOptionalDate(input.occurred_at, "occurred_at");
+  const progress = parseOptionalProgress(input.progress);
+  const level = input.level ?? "info";
+
+  if (!["info", "success", "warning", "error"].includes(level)) {
+    throw reportingError(
+      "INVALID_ARGUMENT",
+      "Field level must be one of: info, success, warning, error"
+    );
+  }
+
+  const details =
+    normalizeInputJsonValue(input.details, "details") ??
+    parseOptionalJson(input.details_json, "details_json");
+
+  await prisma.$transaction(async (tx) => {
+    const [task, agent] = await Promise.all([
+      tx.task.findUnique({
+        where: { id: taskId },
+        select: { id: true, status: true, startedAt: true },
+      }),
+      tx.agent.findUnique({
+        where: { name: agentName },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    if (!task) {
+      throw reportingError("NOT_FOUND", `Task not found: ${taskId}`);
+    }
+
+    if (!agent) {
+      throw reportingError("NOT_FOUND", `Agent not found: ${agentName}`);
+    }
+
+    if (task.status === "pending" || task.status === "queued") {
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: "running",
+          startedAt: task.startedAt ?? occurredAt ?? new Date(),
+        },
+      });
+    }
+
+    await tx.taskExecutionEvent.create({
+      data: {
+        taskId,
+        agentId: agent.id,
+        agentName: agent.name,
+        eventType,
+        level,
+        stage: input.stage?.trim() || null,
+        message,
+        progress,
+        details,
+        createdAt: occurredAt,
+      },
+    });
+
+    const isActiveTask = ["pending", "queued", "running"].includes(task.status);
+
+    if (!isActiveTask) {
+      return;
+    }
+
+    if (eventType === "completed") {
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: "success",
+          startedAt: task.startedAt ?? occurredAt ?? new Date(),
+          completedAt: occurredAt ?? new Date(),
+          result: {
+            success: true,
+          },
+        },
+      });
+      return;
+    }
+
+    if (eventType === "failed") {
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: "failed",
+          startedAt: task.startedAt ?? occurredAt ?? new Date(),
+          completedAt: occurredAt ?? new Date(),
+          result: {
+            success: false,
+            error: message,
+          },
+        },
+      });
+    }
+  });
 }
 
 export async function reportTaskCallback(
@@ -572,6 +901,31 @@ export async function reportTaskCallback(
             : input.error?.trim() || "Unknown error",
         status,
         executionTime: input.execution_time_ms ?? 0,
+      },
+    });
+
+    await tx.taskExecutionEvent.create({
+      data: {
+        taskId,
+        agentId: agent.id,
+        agentName,
+        eventType: status === "success" ? "completed" : "failed",
+        level: status === "success" ? "success" : "error",
+        stage: "callback",
+        message:
+          status === "success"
+            ? t("notifications.taskCompletedSuccess", {
+                name: agentName,
+                taskName: updated.name,
+              })
+            : t("notifications.taskCompletedFailed", {
+                name: agentName,
+                taskName: updated.name,
+                error: input.error?.trim() || "Unknown error",
+              }),
+        progress: status === "success" ? 100 : undefined,
+        details: normalizeInputJsonValue(resultData, "result"),
+        createdAt: completedAt ?? new Date(),
       },
     });
 

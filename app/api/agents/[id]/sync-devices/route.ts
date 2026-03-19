@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 const SYNC_TIMEOUT_MS = 30000; // 30-second timeout
 
@@ -24,7 +25,7 @@ export async function POST(
       );
     }
 
-    if (agent.status !== "online") {
+    if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         { success: false, error: "Agent 当前不在线，无法同步设备" },
         { status: 400 }

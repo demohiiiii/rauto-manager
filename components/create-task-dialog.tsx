@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import type { DispatchType } from "@/lib/types";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
 import { TemplateForm, buildTemplatePayload, validateTemplateForm, defaultTemplateFormData, type TemplateFormData } from "@/components/task-forms/template-form";
@@ -81,14 +82,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
 
   const queryClient = useQueryClient();
 
-  // Fetch the online agent list
+  // Fetch the available agent list
   const { data: agentsData } = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiClient.getAgents(),
   });
 
-  const onlineAgents = (agentsData?.data ?? []).filter(
-    (a) => a.status === "online"
+  const availableAgents = (agentsData?.data ?? []).filter(
+    (a) => isAgentAvailableStatus(a.status)
   );
 
   // Reload connections whenever the selected agent changes
@@ -239,10 +240,10 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 <SelectValue placeholder={t("selectOnlineAgent")} />
               </SelectTrigger>
               <SelectContent>
-                {onlineAgents.length === 0 ? (
+                {availableAgents.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">{t("noOnlineAgents")}</div>
                 ) : (
-                  onlineAgents.map((agent) => (
+                  availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name} ({agent.host}:{agent.port})
                     </SelectItem>

@@ -19,6 +19,7 @@ const PUBLIC_PATHS = [
   "/api/agents/report-devices",
   "/api/agents/update-device-status",
   "/api/agents/report-error",
+  "/api/agents/report-task-event",
   "/api/agents/report-task-callback",
   "/api/tasks/callback",
   // The SSE notification stream still needs JWT auth, but cannot be redirected by proxy

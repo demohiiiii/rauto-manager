@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, DispatchRequest, DispatchType } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { dispatchToAgent } from "@/lib/dispatch";
+import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
 import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
+import { isAgentAvailableStatus } from "@/lib/utils";
 
 const VALID_TYPES: DispatchType[] = [
   "exec",
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (agent.status !== "online" && agent.status !== "busy") {
+    if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         {
           success: false,
@@ -103,17 +104,38 @@ export async function POST(request: NextRequest) {
     // Build the task name
     const typeLabel = t(`tasks.dispatchType.${body.type}`);
     const taskName = `[${typeLabel}] ${summarizePayload(body)}`;
+    const asyncDispatch = isAsyncDispatchType(body.type);
 
     // Create the task record
-    const task = await prisma.task.create({
-      data: {
-        name: taskName,
-        agentIds: [agent.id],
-        dispatchType: body.type,
-        payload: body.payload as Prisma.InputJsonValue,
-        status: "running",
-        startedAt: new Date(),
-      },
+    const task = await prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          name: taskName,
+          agentIds: [agent.id],
+          dispatchType: body.type,
+          payload: body.payload as Prisma.InputJsonValue,
+          status: asyncDispatch ? "pending" : "running",
+          startedAt: asyncDispatch ? undefined : new Date(),
+        },
+      });
+
+      await tx.taskExecutionEvent.create({
+        data: {
+          taskId: createdTask.id,
+          agentId: agent.id,
+          agentName: agent.name,
+          eventType: "dispatching",
+          level: "info",
+          stage: "manager",
+          message: t("tasks.eventDispatching", { name: agent.name }),
+          progress: 0,
+          details: {
+            dispatchType: body.type,
+          },
+        },
+      });
+
+      return createdTask;
     });
 
     // Build the callback URL from the current request origin
@@ -124,7 +146,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Call the agent
-      await dispatchToAgent({
+      const dispatchResult = await dispatchToAgent({
         agent: { host: agent.host, port: agent.port },
         type: body.type,
         taskId: task.id,
@@ -135,18 +157,61 @@ export async function POST(request: NextRequest) {
         recordLevel: body.record_level,
       });
 
+      const taskStatus = dispatchResult.executionMode === "async" ? "queued" : "running";
+
+      await prisma.$transaction(async (tx) => {
+        if (dispatchResult.executionMode === "async") {
+          await tx.task.updateMany({
+            where: {
+              id: task.id,
+              status: "pending",
+            },
+            data: {
+              status: "queued",
+            },
+          });
+        }
+
+        await tx.taskExecutionEvent.create({
+          data: {
+            taskId: task.id,
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: dispatchResult.executionMode === "async" ? "queued" : "dispatched",
+            level: "info",
+            stage: "manager",
+            message:
+              dispatchResult.executionMode === "async"
+                ? t("tasks.eventAccepted", { name: agent.name })
+                : t("tasks.eventDispatched", { name: agent.name }),
+            progress: dispatchResult.executionMode === "async" ? 5 : 10,
+            details: {
+              dispatchType: body.type,
+              executionMode: dispatchResult.executionMode,
+              agentResponse: dispatchResult.response,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      });
+
       const response: ApiResponse<{
         task_id: string;
+        accepted: boolean;
         dispatched: boolean;
         agent_name: string;
         dispatch_type: string;
+        task_status: "queued" | "running";
+        execution_mode: "sync" | "async";
       }> = {
         success: true,
         data: {
           task_id: task.id,
+          accepted: true,
           dispatched: true,
           agent_name: agent.name,
           dispatch_type: body.type,
+          task_status: taskStatus,
+          execution_mode: dispatchResult.executionMode,
         },
       };
 
@@ -165,28 +230,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response);
     } catch (dispatchError) {
       // If the agent call fails, mark the task as failed
-      await prisma.task.update({
-        where: { id: task.id },
-        data: {
-          status: "failed",
-          completedAt: new Date(),
-          result: {
-            success: false,
-            error:
-              dispatchError instanceof Error
-                ? dispatchError.message
-                : "Agent 调用失败",
+      const dispatchErrorMessage =
+        dispatchError instanceof Error
+          ? dispatchError.message
+          : "Agent 调用失败";
+
+      await prisma.$transaction([
+        prisma.task.update({
+          where: { id: task.id },
+          data: {
+            status: "failed",
+            completedAt: new Date(),
+            result: {
+              success: false,
+              error: dispatchErrorMessage,
+            },
           },
-        },
-      });
+        }),
+        prisma.taskExecutionEvent.create({
+          data: {
+            taskId: task.id,
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: "failed",
+            level: "error",
+            stage: "manager",
+            message: t("tasks.eventDispatchFailed", {
+              name: agent.name,
+              error: dispatchErrorMessage,
+            }),
+            details: {
+              dispatchType: body.type,
+            },
+          },
+        }),
+      ]);
 
       return NextResponse.json(
         {
           success: false,
-          error:
-            dispatchError instanceof Error
-              ? dispatchError.message
-              : "Agent 调用失败",
+          error: dispatchErrorMessage,
         },
         { status: 502 }
       );
