@@ -8,6 +8,7 @@ import {
   Server,
   Network,
   Zap,
+  Workflow,
   Settings,
   FileText,
   Activity,
@@ -26,13 +27,14 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 
 const NAV_ITEMS = [
-  { nameKey: "dashboard", href: "/", icon: LayoutDashboard },
-  { nameKey: "agentManagement", href: "/agents", icon: Server },
-  { nameKey: "deviceManagement", href: "/devices", icon: Network },
-  { nameKey: "taskOrchestration", href: "/tasks", icon: Zap },
-  { nameKey: "executionHistory", href: "/history", icon: Activity },
-  { nameKey: "docCenter", href: "/docs", icon: FileText },
-  { nameKey: "systemSettings", href: "/settings", icon: Settings },
+  { nameKey: "dashboard", href: "/", icon: LayoutDashboard, match: "exact" },
+  { nameKey: "agentManagement", href: "/agents", icon: Server, match: "prefix" },
+  { nameKey: "deviceManagement", href: "/devices", icon: Network, match: "prefix" },
+  { nameKey: "taskOrchestration", href: "/tasks", icon: Zap, match: "exact" },
+  { nameKey: "complexTaskDesigner", href: "/tasks/designer", icon: Workflow, match: "prefix" },
+  { nameKey: "executionHistory", href: "/history", icon: Activity, match: "prefix" },
+  { nameKey: "docCenter", href: "/docs", icon: FileText, match: "prefix" },
+  { nameKey: "systemSettings", href: "/settings", icon: Settings, match: "prefix" },
 ] as const;
 
 export function AppSidebar() {
@@ -70,7 +72,11 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-4">
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            item.match === "exact"
+              ? pathname === item.href
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.nameKey}

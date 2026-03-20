@@ -5,6 +5,11 @@ import {
   KeyValueRow,
   OutputBlock,
 } from "./shared";
+import {
+  asArrayOfObjects,
+  asObject,
+  asString,
+} from "./result-helpers";
 
 interface PayloadRendererProps {
   dispatchType: DispatchType;
@@ -167,6 +172,7 @@ function TxBlockPayload({
 }) {
   const commands = payload.commands as string[] | undefined;
   const rollbackCommands = payload.rollback_commands as string[] | undefined;
+  const vars = payload.vars;
 
   return (
     <SectionCard>
@@ -187,10 +193,37 @@ function TxBlockPayload({
             value={`${payload.timeout_secs}s`}
           />
         )}
+        {payload.template != null && (
+          <KeyValueRow
+            label={t("templateName")}
+            value={String(payload.template)}
+            mono
+          />
+        )}
+        {payload.template_profile != null && (
+          <KeyValueRow
+            label={t("templateProfile")}
+            value={String(payload.template_profile)}
+            mono
+          />
+        )}
         {payload.rollback_on_failure !== undefined && (
           <KeyValueRow
             label={t("rollbackOnFailure")}
             value={payload.rollback_on_failure ? "Yes" : "No"}
+          />
+        )}
+        {payload.resource_rollback_command != null && (
+          <KeyValueRow
+            label={t("wholeResourceRollback")}
+            value={String(payload.resource_rollback_command)}
+            mono
+          />
+        )}
+        {payload.rollback_trigger_step_index !== undefined && (
+          <KeyValueRow
+            label={t("triggerStep")}
+            value={String(payload.rollback_trigger_step_index)}
           />
         )}
 
@@ -214,18 +247,21 @@ function TxBlockPayload({
             />
           </div>
         )}
+
+        {vars != null && (
+          <div className="pt-1">
+            <span className="text-xs text-muted-foreground">{t("variables")}:</span>
+            <OutputBlock
+              content={
+                typeof vars === "string" ? vars : JSON.stringify(vars, null, 2)
+              }
+              maxHeight="120px"
+            />
+          </div>
+        )}
       </div>
     </SectionCard>
   );
-}
-
-// ── TxWorkflow ───────────────────────────────────────────────────────
-interface WorkflowBlock {
-  name?: string;
-  kind?: string;
-  mode?: string;
-  commands?: string[];
-  rollback_commands?: string[];
 }
 
 function TxWorkflowPayload({
@@ -235,58 +271,62 @@ function TxWorkflowPayload({
   payload: Record<string, unknown>;
   t: TFunc;
 }) {
-  const blocks = (payload.blocks ?? []) as WorkflowBlock[];
+  const workflow = asObject(payload.workflow) ?? payload;
+  const blocks = asArrayOfObjects(workflow.blocks);
 
   return (
     <div className="space-y-2">
       <SectionCard>
         <div className="space-y-0.5">
-          {payload.name != null && (
+          {workflow.name != null && (
             <KeyValueRow
               label={t("workflowName")}
-              value={String(payload.name)}
+              value={String(workflow.name)}
               mono
             />
           )}
-          {payload.mode != null && (
-            <KeyValueRow label={t("mode")} value={String(payload.mode)} />
-          )}
-          {payload.dry_run !== undefined && (
+          {workflow.fail_fast !== undefined && (
             <KeyValueRow
-              label={t("dryRun")}
-              value={payload.dry_run ? "Yes" : "No"}
+              label={t("failFast")}
+              value={workflow.fail_fast ? t("on") : t("off")}
             />
           )}
         </div>
       </SectionCard>
 
       {blocks.map((block, i) => (
-        <SectionCard key={i} title={`${t("blockName")}: ${block.name ?? `#${i + 1}`}`}>
+        <SectionCard
+          key={i}
+          title={`${t("blockName")}: ${asString(block.name) ?? `#${i + 1}`}`}
+        >
           <div className="space-y-1 text-sm">
             {block.kind != null && (
-              <KeyValueRow label="Kind" value={block.kind} />
+              <KeyValueRow label={t("kind")} value={String(block.kind)} />
             )}
-            {block.mode != null && (
-              <KeyValueRow label={t("mode")} value={block.mode} />
+            {block.fail_fast !== undefined && (
+              <KeyValueRow
+                label={t("failFast")}
+                value={block.fail_fast ? t("on") : t("off")}
+              />
             )}
-            {block.commands != null && block.commands.length > 0 && (
+            {block.rollback_policy != null && (
               <div className="pt-1">
                 <span className="text-xs text-muted-foreground">
-                  {t("commands")} ({block.commands.length}):
+                  {t("rollbackPolicy")}:
                 </span>
                 <OutputBlock
-                  content={block.commands.join("\n")}
-                  maxHeight="80px"
+                  content={JSON.stringify(block.rollback_policy, null, 2)}
+                  maxHeight="100px"
                 />
               </div>
             )}
-            {block.rollback_commands != null && block.rollback_commands.length > 0 && (
+            {Array.isArray(block.steps) && block.steps.length > 0 && (
               <div className="pt-1">
                 <span className="text-xs text-muted-foreground">
-                  {t("rollbackCommands")} ({block.rollback_commands.length}):
+                  {t("commands")} ({block.steps.length}):
                 </span>
                 <OutputBlock
-                  content={block.rollback_commands.join("\n")}
+                  content={JSON.stringify(block.steps, null, 2)}
                   maxHeight="80px"
                 />
               </div>
@@ -298,14 +338,6 @@ function TxWorkflowPayload({
   );
 }
 
-// ── Orchestrate ──────────────────────────────────────────────────────
-interface OrchestrateStage {
-  name?: string;
-  strategy?: string;
-  action?: Record<string, unknown>;
-  targets?: string[];
-}
-
 function OrchestratePayload({
   payload,
   t,
@@ -313,32 +345,86 @@ function OrchestratePayload({
   payload: Record<string, unknown>;
   t: TFunc;
 }) {
-  const stages = (payload.stages ?? []) as OrchestrateStage[];
+  const plan = asObject(payload.plan) ?? payload;
+  const stages = asArrayOfObjects(plan.stages);
 
   return (
     <div className="space-y-2">
-      {payload.plan_name != null && (
+      <SectionCard>
+        <div className="space-y-0.5">
+          {plan.name != null && (
+            <KeyValueRow
+              label={t("planName")}
+              value={String(plan.name)}
+              mono
+            />
+          )}
+          {plan.fail_fast !== undefined && (
+            <KeyValueRow
+              label={t("failFast")}
+              value={plan.fail_fast ? t("on") : t("off")}
+            />
+          )}
+          {payload.base_dir != null && (
+            <KeyValueRow label={t("baseDir")} value={String(payload.base_dir)} mono />
+          )}
+          {plan.inventory_file != null && (
+            <KeyValueRow
+              label={t("inventoryFile")}
+              value={String(plan.inventory_file)}
+              mono
+            />
+          )}
+        </div>
+      </SectionCard>
+
+      {plan.inventory != null && (
         <SectionCard>
-          <KeyValueRow
-            label={t("planName")}
-            value={String(payload.plan_name)}
-            mono
-          />
+          <div className="pt-1">
+            <span className="text-xs text-muted-foreground">{t("inventory")}:</span>
+            <OutputBlock
+              content={JSON.stringify(plan.inventory, null, 2)}
+              maxHeight="140px"
+            />
+          </div>
         </SectionCard>
       )}
 
       {stages.map((stage, i) => (
-        <SectionCard key={i} title={`${t("stageName")}: ${stage.name ?? `#${i + 1}`}`}>
+        <SectionCard
+          key={i}
+          title={`${t("stageName")}: ${asString(stage.name) ?? `#${i + 1}`}`}
+        >
           <div className="space-y-1 text-sm">
             {stage.strategy != null && (
-              <KeyValueRow label={t("strategy")} value={stage.strategy} />
+              <KeyValueRow label={t("strategy")} value={String(stage.strategy)} />
             )}
-            {stage.targets != null && stage.targets.length > 0 && (
+            {stage.max_parallel !== undefined && (
+              <KeyValueRow label={t("maxParallel")} value={String(stage.max_parallel)} />
+            )}
+            {stage.fail_fast !== undefined && (
               <KeyValueRow
-                label={t("targetLabel")}
-                value={stage.targets.join(", ")}
+                label={t("failFast")}
+                value={stage.fail_fast ? t("on") : t("off")}
+              />
+            )}
+            {Array.isArray(stage.target_groups) && stage.target_groups.length > 0 && (
+              <KeyValueRow
+                label={t("targetGroups")}
+                value={stage.target_groups.join(", ")}
                 mono
               />
+            )}
+            {Array.isArray(stage.targets) && stage.targets.length > 0 && (
+              <div className="pt-1">
+                <span className="text-xs text-muted-foreground">
+                  {t("targetLabel")}:
+                </span>
+                <OutputBlock
+                  content={JSON.stringify(stage.targets, null, 2)}
+                  maxHeight="100px"
+                />
+              </div>
             )}
             {stage.action != null && (
               <div className="pt-1">

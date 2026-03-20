@@ -2,7 +2,8 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -10,18 +11,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-export interface TxStep {
-  command: string;
-  rollback: string;
-}
+type TxMode = "Enable" | "Config";
+type TxBlockRollbackMode = "infer" | "per_step" | "whole_resource";
 
 export interface TxBlockFormData {
   name: string;
-  steps: TxStep[];
-  mode: "enable" | "config";
+  template: string;
+  varsJson: string;
+  commandsText: string;
+  rollbackCommandsText: string;
+  mode: TxMode;
+  timeoutSecs: string;
+  rollbackMode: TxBlockRollbackMode;
+  rollbackOnFailure: boolean;
+  resourceRollbackCommand: string;
+  rollbackTriggerStepIndex: string;
+  templateProfile: string;
 }
 
 interface TxBlockFormProps {
@@ -29,147 +36,388 @@ interface TxBlockFormProps {
   onChange: (data: TxBlockFormData) => void;
 }
 
+function parseCommandLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function parseRollbackLinesRaw(text: string): string[] {
+  return text.split(/\r?\n/).map((line) => line.trim());
+}
+
+function trimTrailingEmpty(values: string[]): string[] {
+  const next = [...values];
+  while (next.length > 0 && !next[next.length - 1].trim()) {
+    next.pop();
+  }
+  return next;
+}
+
+function parseOptionalPositiveInt(value: string): number | undefined {
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function parseOptionalNonNegativeInt(value: string): number | undefined {
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 export function TxBlockForm({ value, onChange }: TxBlockFormProps) {
   const t = useTranslations("taskForms");
-  const tc = useTranslations("common");
-
-  const addStep = () => {
-    onChange({
-      ...value,
-      steps: [...value.steps, { command: "", rollback: "" }],
-    });
-  };
-
-  const removeStep = (index: number) => {
-    onChange({
-      ...value,
-      steps: value.steps.filter((_, i) => i !== index),
-    });
-  };
-
-  const updateStep = (index: number, field: keyof TxStep, val: string) => {
-    onChange({
-      ...value,
-      steps: value.steps.map((s, i) =>
-        i === index ? { ...s, [field]: val } : s
-      ),
-    });
-  };
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="txblock-name">
-          {t("txBlockName")} <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="txblock-name"
-          placeholder={t("txBlockNamePlaceholder")}
-          value={value.name}
-          onChange={(e) => onChange({ ...value, name: e.target.value })}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>
-            {t("commandList")} <span className="text-destructive">*</span>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="txblock-name">
+            {t("txBlockName")} <span className="text-destructive">*</span>
           </Label>
-          <Button type="button" variant="outline" size="sm" onClick={addStep}>
-            <Plus className="h-3 w-3 mr-1" />
-            {t("addCommand")}
-          </Button>
+          <Input
+            id="txblock-name"
+            placeholder={t("txBlockNamePlaceholder")}
+            value={value.name}
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+          />
         </div>
 
-        {value.steps.length === 0 && (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            {t("noCommands")}
-          </p>
-        )}
+        <div className="space-y-2">
+          <Label htmlFor="txblock-mode">{t("txBlockMode")}</Label>
+          <Select
+            value={value.mode}
+            onValueChange={(next) =>
+              onChange({ ...value, mode: next as TxMode })
+            }
+          >
+            <SelectTrigger id="txblock-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Config">{t("modeConfig")}</SelectItem>
+              <SelectItem value="Enable">{t("modeEnable")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-        <div className="space-y-3">
-          {value.steps.map((step, index) => (
-            <div
-              key={index}
-              className="rounded-md border p-3 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {t("stepNumber", { number: index + 1 })}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeStep(index)}
-                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">{t("commandLabel")}</Label>
-                  <Input
-                    placeholder={t("commandPlaceholder")}
-                    value={step.command}
-                    onChange={(e) => updateStep(index, "command", e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">{t("rollbackCommand")}</Label>
-                  <Input
-                    placeholder={t("rollbackPlaceholder")}
-                    value={step.rollback}
-                    onChange={(e) => updateStep(index, "rollback", e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
+      <div className="space-y-4 rounded-md border p-4">
+        <div className="space-y-2">
+          <Label htmlFor="txblock-template">{t("txBlockTemplate")}</Label>
+          <Input
+            id="txblock-template"
+            placeholder={t("txBlockTemplatePlaceholder")}
+            value={value.template}
+            onChange={(e) => onChange({ ...value, template: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("txBlockTemplateHint")}
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="txblock-template-profile">
+              {t("txBlockTemplateProfile")}
+            </Label>
+            <Input
+              id="txblock-template-profile"
+              placeholder={t("txBlockTemplateProfilePlaceholder")}
+              value={value.templateProfile}
+              onChange={(e) =>
+                onChange({ ...value, templateProfile: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="txblock-timeout">{t("txBlockTimeout")}</Label>
+            <Input
+              id="txblock-timeout"
+              inputMode="numeric"
+              placeholder={t("txBlockTimeoutPlaceholder")}
+              value={value.timeoutSecs}
+              onChange={(e) =>
+                onChange({ ...value, timeoutSecs: e.target.value })
+              }
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="txblock-vars">{t("txBlockVars")}</Label>
+          <Textarea
+            id="txblock-vars"
+            className="min-h-[120px] font-mono text-sm"
+            placeholder='{"hostname":"core-01"}'
+            value={value.varsJson}
+            onChange={(e) => onChange({ ...value, varsJson: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">{t("txBlockVarsHint")}</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="txblock-mode">{tc("executionMode")}</Label>
-        <Select
-          value={value.mode}
-          onValueChange={(v) => onChange({ ...value, mode: v as "enable" | "config" })}
-        >
-          <SelectTrigger id="txblock-mode">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="enable">{tc("enableMode")}</SelectItem>
-            <SelectItem value="config">{tc("configMode")}</SelectItem>
-          </SelectContent>
-        </Select>
+        <Label htmlFor="txblock-commands">{t("commandList")}</Label>
+        <Textarea
+          id="txblock-commands"
+          className="min-h-[160px] font-mono text-sm"
+          placeholder={t("txBlockCommandsPlaceholder")}
+          value={value.commandsText}
+          onChange={(e) => onChange({ ...value, commandsText: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("txBlockCommandsHint")}
+        </p>
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="txblock-rollback-mode">{t("txBlockRollbackMode")}</Label>
+          <Select
+            value={value.rollbackMode}
+            onValueChange={(next) =>
+              onChange({ ...value, rollbackMode: next as TxBlockRollbackMode })
+            }
+          >
+            <SelectTrigger id="txblock-rollback-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="infer">
+                {t("txBlockRollbackModeInfer")}
+              </SelectItem>
+              <SelectItem value="per_step">
+                {t("txBlockRollbackModePerStep")}
+              </SelectItem>
+              <SelectItem value="whole_resource">
+                {t("txBlockRollbackModeWholeResource")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center justify-between rounded-md border px-4 py-3">
+          <div className="space-y-0.5">
+            <Label>{t("txBlockRollbackOnFailure")}</Label>
+            <p className="text-xs text-muted-foreground">
+              {t("txBlockRollbackOnFailureHint")}
+            </p>
+          </div>
+          <Switch
+            checked={value.rollbackOnFailure}
+            onCheckedChange={(checked) =>
+              onChange({ ...value, rollbackOnFailure: checked })
+            }
+          />
+        </div>
+      </div>
+
+      {value.rollbackMode === "per_step" && (
+        <div className="space-y-2">
+          <Label htmlFor="txblock-rollbacks">{t("rollbackCommand")}</Label>
+          <Textarea
+            id="txblock-rollbacks"
+            className="min-h-[140px] font-mono text-sm"
+            placeholder={t("txBlockRollbackCommandsPlaceholder")}
+            value={value.rollbackCommandsText}
+            onChange={(e) =>
+              onChange({ ...value, rollbackCommandsText: e.target.value })
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("txBlockRollbackCommandsHint")}
+          </p>
+        </div>
+      )}
+
+      {value.rollbackMode === "whole_resource" && (
+        <div className="rounded-md border p-4 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="txblock-resource-rollback">
+              {t("txBlockResourceRollbackCommand")}
+            </Label>
+            <Input
+              id="txblock-resource-rollback"
+              placeholder={t("txBlockResourceRollbackPlaceholder")}
+              value={value.resourceRollbackCommand}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  resourceRollbackCommand: e.target.value,
+                })
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="txblock-trigger-step">
+              {t("txBlockRollbackTriggerStepIndex")}
+            </Label>
+            <Input
+              id="txblock-trigger-step"
+              inputMode="numeric"
+              placeholder={t("txBlockRollbackTriggerStepIndexPlaceholder")}
+              value={value.rollbackTriggerStepIndex}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  rollbackTriggerStepIndex: e.target.value,
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unknown> {
-  return {
-    name: data.name,
-    commands: data.steps.map((s) => s.command),
-    rollback_commands: data.steps.map((s) => s.rollback).filter(Boolean),
+  const payload: Record<string, unknown> = {
+    name: data.name.trim(),
     mode: data.mode,
   };
+
+  const template = data.template.trim();
+  if (template) {
+    payload.template = template;
+  }
+
+  if (data.varsJson.trim()) {
+    payload.vars = JSON.parse(data.varsJson);
+  } else {
+    payload.vars = {};
+  }
+
+  const commands = parseCommandLines(data.commandsText);
+  if (commands.length > 0) {
+    payload.commands = commands;
+  }
+
+  const timeoutSecs = parseOptionalPositiveInt(data.timeoutSecs);
+  if (timeoutSecs !== undefined) {
+    payload.timeout_secs = timeoutSecs;
+  }
+
+  if (data.rollbackOnFailure) {
+    payload.rollback_on_failure = true;
+  }
+
+  const templateProfile = data.templateProfile.trim();
+  if (templateProfile) {
+    payload.template_profile = templateProfile;
+  }
+
+  if (data.rollbackMode === "per_step") {
+    const rollbackCommands = trimTrailingEmpty(
+      parseRollbackLinesRaw(data.rollbackCommandsText)
+    );
+    if (rollbackCommands.length > 0) {
+      payload.rollback_commands = rollbackCommands;
+    }
+  }
+
+  if (data.rollbackMode === "whole_resource") {
+    const resourceRollbackCommand = data.resourceRollbackCommand.trim();
+    if (resourceRollbackCommand) {
+      payload.resource_rollback_command = resourceRollbackCommand;
+    }
+
+    const rollbackTriggerStepIndex = parseOptionalNonNegativeInt(
+      data.rollbackTriggerStepIndex
+    );
+    if (rollbackTriggerStepIndex !== undefined) {
+      payload.rollback_trigger_step_index = rollbackTriggerStepIndex;
+    }
+  }
+
+  return payload;
 }
 
-export function validateTxBlockForm(data: TxBlockFormData, t: (key: string, params?: Record<string, string | number | Date>) => string): string | null {
-  if (!data.name.trim()) return t("enterBlockName");
-  if (data.steps.length === 0) return t("addAtLeastOneCommand");
-  const emptyCmd = data.steps.findIndex((s) => !s.command.trim());
-  if (emptyCmd >= 0) return t("stepCommandEmpty", { number: emptyCmd + 1 });
+export function validateTxBlockForm(
+  data: TxBlockFormData,
+  t: (key: string, params?: Record<string, string | number | Date>) => string
+): string | null {
+  if (!data.name.trim()) {
+    return t("enterBlockName");
+  }
+
+  if (data.varsJson.trim()) {
+    try {
+      JSON.parse(data.varsJson);
+    } catch {
+      return t("txBlockVarsInvalidJson");
+    }
+  }
+
+  const commands = parseCommandLines(data.commandsText);
+  if (!data.template.trim() && commands.length === 0) {
+    return t("txBlockNeedsTemplateOrCommands");
+  }
+
+  if (
+    data.timeoutSecs.trim() &&
+    parseOptionalPositiveInt(data.timeoutSecs) === undefined
+  ) {
+    return t("positiveIntegerRequired");
+  }
+
+  if (
+    data.rollbackTriggerStepIndex.trim() &&
+    parseOptionalNonNegativeInt(data.rollbackTriggerStepIndex) === undefined
+  ) {
+    return t("nonNegativeIntegerRequired");
+  }
+
+  if (
+    data.rollbackMode === "whole_resource" &&
+    data.rollbackTriggerStepIndex.trim() &&
+    !data.resourceRollbackCommand.trim()
+  ) {
+    return t("txBlockRollbackTriggerRequiresResourceRollback");
+  }
+
+  if (
+    data.rollbackMode === "whole_resource" &&
+    !data.resourceRollbackCommand.trim()
+  ) {
+    return t("txBlockResourceRollbackRequired");
+  }
+
   return null;
 }
 
 export const defaultTxBlockFormData: TxBlockFormData = {
   name: "",
-  steps: [{ command: "", rollback: "" }],
-  mode: "config",
+  template: "",
+  varsJson: "",
+  commandsText: "",
+  rollbackCommandsText: "",
+  mode: "Config",
+  timeoutSecs: "",
+  rollbackMode: "infer",
+  rollbackOnFailure: false,
+  resourceRollbackCommand: "",
+  rollbackTriggerStepIndex: "",
+  templateProfile: "",
 };

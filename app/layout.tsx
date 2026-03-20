@@ -1,4 +1,5 @@
 import "./globals.css";
+import "@xyflow/react/dist/style.css";
 import { Providers } from "./providers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";

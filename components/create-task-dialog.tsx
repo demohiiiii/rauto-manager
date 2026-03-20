@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Zap, Terminal, FileCode, Layers, Network, GitBranch } from "lucide-react";
+import { Loader2, Zap, Terminal, FileCode, Layers } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,19 +32,17 @@ import { isAgentAvailableStatus } from "@/lib/utils";
 import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
 import { TemplateForm, buildTemplatePayload, validateTemplateForm, defaultTemplateFormData, type TemplateFormData } from "@/components/task-forms/template-form";
 import { TxBlockForm, buildTxBlockPayload, validateTxBlockForm, defaultTxBlockFormData, type TxBlockFormData } from "@/components/task-forms/tx-block-form";
-import { TxWorkflowForm, buildTxWorkflowPayload, validateTxWorkflowForm, defaultTxWorkflowFormData, type TxWorkflowFormData } from "@/components/task-forms/tx-workflow-form";
-import { OrchestrateForm, buildOrchestratePayload, validateOrchestrateForm, defaultOrchestrateFormData, type OrchestrateFormData } from "@/components/task-forms/orchestrate-form";
+
+type SimpleDispatchType = Extract<DispatchType, "exec" | "template" | "tx_block">;
 
 const DISPATCH_TYPE_CONFIG: {
-  type: DispatchType;
+  type: SimpleDispatchType;
   labelKey: string;
   icon: typeof Terminal;
 }[] = [
   { type: "exec", labelKey: "singleCommand", icon: Terminal },
   { type: "template", labelKey: "template", icon: FileCode },
   { type: "tx_block", labelKey: "txBlock", icon: Layers },
-  { type: "tx_workflow", labelKey: "workflow", icon: GitBranch },
-  { type: "orchestrate", labelKey: "orchestrate", icon: Network },
 ];
 
 interface ConnectionItem {
@@ -66,7 +64,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const tf = useTranslations("taskForms");
   const [submitting, setSubmitting] = useState(false);
   const [agentId, setAgentId] = useState("");
-  const [dispatchType, setDispatchType] = useState<DispatchType>("exec");
+  const [dispatchType, setDispatchType] = useState<SimpleDispatchType>("exec");
   const [connectionName, setConnectionName] = useState("");
   const [dryRun, setDryRun] = useState(false);
   const [recordLevel, setRecordLevel] = useState<"Off" | "KeyEventsOnly" | "Full">(
@@ -77,8 +75,6 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const [execData, setExecData] = useState<ExecFormData>(defaultExecFormData);
   const [templateData, setTemplateData] = useState<TemplateFormData>(defaultTemplateFormData);
   const [txBlockData, setTxBlockData] = useState<TxBlockFormData>(defaultTxBlockFormData);
-  const [txWorkflowData, setTxWorkflowData] = useState<TxWorkflowFormData>(defaultTxWorkflowFormData);
-  const [orchestrateData, setOrchestrateData] = useState<OrchestrateFormData>(defaultOrchestrateFormData);
 
   // Connection list
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
@@ -134,14 +130,12 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     setExecData(defaultExecFormData);
     setTemplateData(defaultTemplateFormData);
     setTxBlockData(defaultTxBlockFormData);
-    setTxWorkflowData(defaultTxWorkflowFormData);
-    setOrchestrateData(defaultOrchestrateFormData);
   };
 
   // Validate the form
   const validateForm = (): string | null => {
     if (!agentId) return t("selectAgent");
-    if (dispatchType !== "orchestrate" && !connectionName) return t("selectConnection");
+    if (!connectionName) return t("selectConnection");
 
     switch (dispatchType) {
       case "exec":
@@ -150,10 +144,6 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         return validateTemplateForm(templateData, tf);
       case "tx_block":
         return validateTxBlockForm(txBlockData, tf);
-      case "tx_workflow":
-        return validateTxWorkflowForm(txWorkflowData, tf);
-      case "orchestrate":
-        return validateOrchestrateForm(orchestrateData, tf);
       default:
         return null;
     }
@@ -168,10 +158,6 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         return buildTemplatePayload(templateData);
       case "tx_block":
         return buildTxBlockPayload(txBlockData);
-      case "tx_workflow":
-        return buildTxWorkflowPayload(txWorkflowData);
-      case "orchestrate":
-        return buildOrchestratePayload(orchestrateData);
       default:
         return {};
     }
@@ -191,10 +177,9 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       const payload = buildPayload();
 
       // Build the connection payload
-      const connection =
-        dispatchType !== "orchestrate" && connectionName
-          ? { connection_name: connectionName }
-          : undefined;
+      const connection = connectionName
+        ? { connection_name: connectionName }
+        : undefined;
 
       const result = await apiClient.dispatch({
         type: dispatchType,
@@ -286,45 +271,42 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             </div>
           </div>
 
-          {/* Device connection selection (not required for orchestrate) */}
-          {dispatchType !== "orchestrate" && (
-            <div className="space-y-2">
-              <Label>
-                {t("deviceConnection")} <span className="text-destructive">*</span>
-              </Label>
-              {loadingConnections ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {t("loadingConnections")}
-                </div>
-              ) : (
-                <Select
-                  value={connectionName}
-                  onValueChange={setConnectionName}
-                  disabled={!agentId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={agentId ? t("selectDeviceConnection") : t("selectAgentFirst")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {connections.length === 0 ? (
-                      <div className="p-2 text-sm text-muted-foreground">
-                        {agentId ? t("noAvailableConnections") : t("selectAgentFirst")}
-                      </div>
-                    ) : (
-                      connections.map((conn) => (
-                        <SelectItem key={conn.name} value={conn.name}>
-                          {conn.name}
-                          {conn.host ? ` (${conn.host})` : ""}
-                          {conn.device_profile ? ` [${conn.device_profile}]` : ""}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>
+              {t("deviceConnection")} <span className="text-destructive">*</span>
+            </Label>
+            {loadingConnections ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("loadingConnections")}
+              </div>
+            ) : (
+              <Select
+                value={connectionName}
+                onValueChange={setConnectionName}
+                disabled={!agentId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={agentId ? t("selectDeviceConnection") : t("selectAgentFirst")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {connections.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      {agentId ? t("noAvailableConnections") : t("selectAgentFirst")}
+                    </div>
+                  ) : (
+                    connections.map((conn) => (
+                      <SelectItem key={conn.name} value={conn.name}>
+                        {conn.name}
+                        {conn.host ? ` (${conn.host})` : ""}
+                        {conn.device_profile ? ` [${conn.device_profile}]` : ""}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
           {/* Shared options */}
           <div className="flex items-center gap-6">
@@ -386,12 +368,6 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             )}
             {dispatchType === "tx_block" && (
               <TxBlockForm value={txBlockData} onChange={setTxBlockData} />
-            )}
-            {dispatchType === "tx_workflow" && (
-              <TxWorkflowForm value={txWorkflowData} onChange={setTxWorkflowData} />
-            )}
-            {dispatchType === "orchestrate" && (
-              <OrchestrateForm value={orchestrateData} onChange={setOrchestrateData} />
             )}
           </div>
         </div>

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -14,17 +15,27 @@ import {
 import { Plus, Trash2, Code, FormInput } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-interface OrchestrateStage {
+type StageStrategy = "serial" | "parallel";
+type OrchestrationActionKind = "tx_block" | "tx_workflow";
+
+export interface OrchestrateStageFormData {
   name: string;
-  strategy: "parallel" | "serial" | "rolling";
-  targets: string;
-  action_type: "exec" | "template";
-  action_command: string;
-  action_template: string;
+  strategy: StageStrategy;
+  maxParallel: string;
+  failFast: boolean;
+  targetGroups: string;
+  targetsJson: string;
+  actionKind: OrchestrationActionKind;
+  actionJson: string;
 }
 
 export interface OrchestrateFormData {
-  stages: OrchestrateStage[];
+  name: string;
+  failFast: boolean;
+  inventoryFile: string;
+  inventoryJson: string;
+  baseDir: string;
+  stages: OrchestrateStageFormData[];
   rawJson: string;
   useRawJson: boolean;
 }
@@ -34,66 +45,192 @@ interface OrchestrateFormProps {
   onChange: (data: OrchestrateFormData) => void;
 }
 
+function defaultActionJson(kind: OrchestrationActionKind): string {
+  if (kind === "tx_workflow") {
+    return JSON.stringify(
+      {
+        workflow_file: "./core-vlan-workflow.json",
+      },
+      null,
+      2
+    );
+  }
+
+  return JSON.stringify(
+    {
+      name: "stage-change",
+      mode: "Config",
+      commands: ["show version"],
+    },
+    null,
+    2
+  );
+}
+
+function defaultStage(): OrchestrateStageFormData {
+  return {
+    name: "",
+    strategy: "serial",
+    maxParallel: "",
+    failFast: true,
+    targetGroups: "",
+    targetsJson: "",
+    actionKind: "tx_block",
+    actionJson: defaultActionJson("tx_block"),
+  };
+}
+
+function parseOptionalPositiveInt(value: string): number | undefined {
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function parsePlanFromJson(rawJson: string): Partial<OrchestrateFormData> | null {
+  try {
+    const parsed = JSON.parse(rawJson) as {
+      name?: string;
+      fail_fast?: boolean;
+      inventory_file?: string;
+      inventory?: unknown;
+      stages?: Array<{
+        name?: string;
+        strategy?: string;
+        max_parallel?: number;
+        fail_fast?: boolean;
+        target_groups?: string[];
+        targets?: unknown;
+        action?: {
+          kind?: string;
+          [key: string]: unknown;
+        };
+      }>;
+    };
+
+    if (!Array.isArray(parsed.stages)) {
+      return null;
+    }
+
+    return {
+      name: parsed.name ?? "",
+      failFast: parsed.fail_fast ?? true,
+      inventoryFile: parsed.inventory_file ?? "",
+      inventoryJson: parsed.inventory
+        ? JSON.stringify(parsed.inventory, null, 2)
+        : "",
+      stages: parsed.stages.map((stage) => {
+        const action = stage.action ?? {};
+        const actionKind =
+          action.kind === "tx_workflow" ? "tx_workflow" : "tx_block";
+        const { kind: _kind, ...actionPayload } = action;
+
+        return {
+          name: stage.name ?? "",
+          strategy: stage.strategy === "parallel" ? "parallel" : "serial",
+          maxParallel:
+            stage.max_parallel !== undefined ? String(stage.max_parallel) : "",
+          failFast: stage.fail_fast ?? true,
+          targetGroups: Array.isArray(stage.target_groups)
+            ? stage.target_groups.join(", ")
+            : "",
+          targetsJson: stage.targets
+            ? JSON.stringify(stage.targets, null, 2)
+            : "",
+          actionKind,
+          actionJson: JSON.stringify(actionPayload, null, 2),
+        };
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildPlanJson(data: OrchestrateFormData): Record<string, unknown> {
+  const plan: Record<string, unknown> = {
+    name: data.name.trim(),
+    fail_fast: data.failFast,
+    stages: data.stages.map((stage) => {
+      const actionPayload = JSON.parse(stage.actionJson) as Record<string, unknown>;
+      const targets = stage.targetsJson.trim()
+        ? (JSON.parse(stage.targetsJson) as unknown[])
+        : undefined;
+      const targetGroups = stage.targetGroups
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const maxParallel = parseOptionalPositiveInt(stage.maxParallel);
+
+      return {
+        name: stage.name.trim(),
+        strategy: stage.strategy,
+        ...(maxParallel !== undefined ? { max_parallel: maxParallel } : {}),
+        fail_fast: stage.failFast,
+        ...(targetGroups.length > 0 ? { target_groups: targetGroups } : {}),
+        ...(targets ? { targets } : {}),
+        action: {
+          kind: stage.actionKind,
+          ...actionPayload,
+        },
+      };
+    }),
+  };
+
+  if (data.inventoryFile.trim()) {
+    plan.inventory_file = data.inventoryFile.trim();
+  }
+
+  if (data.inventoryJson.trim()) {
+    plan.inventory = JSON.parse(data.inventoryJson);
+  }
+
+  return plan;
+}
+
 export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
   const t = useTranslations("taskForms");
 
   const toggleMode = () => {
     if (value.useRawJson) {
-      try {
-        const parsed = JSON.parse(value.rawJson);
-        if (parsed.stages && Array.isArray(parsed.stages)) {
-          onChange({
-            ...value,
-            stages: parsed.stages.map((s: Record<string, unknown>) => ({
-              name: (s.name as string) || "",
-              strategy: (s.strategy as string) || "serial",
-              targets: Array.isArray(s.targets) ? (s.targets as string[]).join(", ") : "",
-              action_type: (s.action as Record<string, unknown>)?.command ? "exec" : "template",
-              action_command: ((s.action as Record<string, unknown>)?.command as string) || "",
-              action_template: ((s.action as Record<string, unknown>)?.template as string) || "",
-            })),
-            useRawJson: false,
-          });
-          return;
-        }
-      } catch {
-        // Parse failed
+      const parsed = parsePlanFromJson(value.rawJson);
+      if (!parsed) {
+        return;
       }
-      onChange({ ...value, useRawJson: false });
-    } else {
-      const plan = {
-        stages: value.stages.map((s) => ({
-          name: s.name,
-          strategy: s.strategy,
-          targets: s.targets.split(",").map((t) => t.trim()).filter(Boolean),
-          action:
-            s.action_type === "exec"
-              ? { command: s.action_command }
-              : { template: s.action_template },
-        })),
-      };
       onChange({
         ...value,
-        rawJson: JSON.stringify(plan, null, 2),
+        ...parsed,
+        useRawJson: false,
+      });
+      return;
+    }
+
+    try {
+      onChange({
+        ...value,
+        rawJson: JSON.stringify(buildPlanJson(value), null, 2),
         useRawJson: true,
       });
+    } catch {
+      return;
     }
   };
 
   const addStage = () => {
     onChange({
       ...value,
-      stages: [
-        ...value.stages,
-        {
-          name: "",
-          strategy: "serial",
-          targets: "",
-          action_type: "exec",
-          action_command: "",
-          action_template: "",
-        },
-      ],
+      stages: [...value.stages, defaultStage()],
     });
   };
 
@@ -104,11 +241,11 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
     });
   };
 
-  const updateStage = (index: number, field: string, val: string) => {
+  const updateStage = (index: number, patch: Partial<OrchestrateStageFormData>) => {
     onChange({
       ...value,
-      stages: value.stages.map((s, i) =>
-        i === index ? { ...s, [field]: val } : s
+      stages: value.stages.map((stage, i) =>
+        i === index ? { ...stage, ...patch } : stage
       ),
     });
   };
@@ -116,32 +253,42 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label>{t("orchestratePlan")}</Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={toggleMode}
-        >
+        <div className="space-y-0.5">
+          <Label>{t("orchestratePlan")}</Label>
+          <p className="text-xs text-muted-foreground">
+            {value.useRawJson ? t("orchestrateJsonHint") : t("actionJsonHint")}
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={toggleMode}>
           {value.useRawJson ? (
             <>
-              <FormInput className="h-3 w-3 mr-1" />
+              <FormInput className="mr-1 h-3 w-3" />
               {t("structuredEdit")}
             </>
           ) : (
             <>
-              <Code className="h-3 w-3 mr-1" />
+              <Code className="mr-1 h-3 w-3" />
               {t("jsonEdit")}
             </>
           )}
         </Button>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="orchestrate-base-dir">{t("baseDir")}</Label>
+        <Input
+          id="orchestrate-base-dir"
+          placeholder={t("baseDirPlaceholder")}
+          value={value.baseDir}
+          onChange={(e) => onChange({ ...value, baseDir: e.target.value })}
+        />
+      </div>
+
       {value.useRawJson ? (
         <div className="space-y-2">
           <Textarea
-            className="font-mono text-sm min-h-[300px]"
-            placeholder='{"stages": [{"name": "stage1", "strategy": "serial", "targets": ["device1"], "action": {"command": "show version"}}]}'
+            className="min-h-[360px] font-mono text-sm"
+            placeholder={t("orchestrateJsonPlaceholder")}
             value={value.rawJson}
             onChange={(e) => onChange({ ...value, rawJson: e.target.value })}
           />
@@ -150,122 +297,228 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {value.stages.map((stage, si) => (
-            <div
-              key={si}
-              className="rounded-md border p-3 space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Stage {si + 1}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeStage(si)}
-                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">{t("stageName")}</Label>
-                  <Input
-                    placeholder={t("stageNamePlaceholder")}
-                    value={stage.name}
-                    onChange={(e) => updateStage(si, "name", e.target.value)}
-                    className="text-sm h-8"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">{t("executionStrategy")}</Label>
-                  <Select
-                    value={stage.strategy}
-                    onValueChange={(v) => updateStage(si, "strategy", v)}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="serial">{t("strategySerial")}</SelectItem>
-                      <SelectItem value="parallel">{t("strategyParallel")}</SelectItem>
-                      <SelectItem value="rolling">{t("strategyRolling")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">{t("targetDevices")}</Label>
-                <Input
-                  placeholder={t("targetDevicesPlaceholder")}
-                  value={stage.targets}
-                  onChange={(e) => updateStage(si, "targets", e.target.value)}
-                  className="text-sm h-8"
-                />
-              </div>
-
-              <div className="grid grid-cols-[auto_1fr] gap-2 items-end">
-                <div className="space-y-1">
-                  <Label className="text-xs">{t("actionType")}</Label>
-                  <Select
-                    value={stage.action_type}
-                    onValueChange={(v) => updateStage(si, "action_type", v)}
-                  >
-                    <SelectTrigger className="h-8 text-sm w-[120px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="exec">{t("actionCommand")}</SelectItem>
-                      <SelectItem value="template">{t("actionTemplate")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">
-                    {stage.action_type === "exec" ? t("actionCommand") : t("templateName")}
-                  </Label>
-                  <Input
-                    placeholder={
-                      stage.action_type === "exec"
-                        ? "show version"
-                        : "template-name"
-                    }
-                    value={
-                      stage.action_type === "exec"
-                        ? stage.action_command
-                        : stage.action_template
-                    }
-                    onChange={(e) =>
-                      updateStage(
-                        si,
-                        stage.action_type === "exec"
-                          ? "action_command"
-                          : "action_template",
-                        e.target.value
-                      )
-                    }
-                    className="text-sm h-8"
-                  />
-                </div>
-              </div>
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="orchestrate-name">
+                {t("planNameLabel")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="orchestrate-name"
+                placeholder={t("planNamePlaceholder")}
+                value={value.name}
+                onChange={(e) => onChange({ ...value, name: e.target.value })}
+              />
             </div>
-          ))}
+            <div className="space-y-2">
+              <Label htmlFor="orchestrate-inventory-file">
+                {t("inventoryFile")}
+              </Label>
+              <Input
+                id="orchestrate-inventory-file"
+                placeholder={t("inventoryFilePlaceholder")}
+                value={value.inventoryFile}
+                onChange={(e) =>
+                  onChange({ ...value, inventoryFile: e.target.value })
+                }
+              />
+            </div>
+          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addStage}
-            className="w-full"
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            {t("addStage")}
-          </Button>
+          <div className="flex items-center justify-between rounded-md border px-4 py-3">
+            <div className="space-y-0.5">
+              <Label>{t("planFailFast")}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t("planFailFastHint")}
+              </p>
+            </div>
+            <Switch
+              checked={value.failFast}
+              onCheckedChange={(checked) =>
+                onChange({ ...value, failFast: checked })
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="orchestrate-inventory-json">{t("inventoryJson")}</Label>
+            <Textarea
+              id="orchestrate-inventory-json"
+              className="min-h-[140px] font-mono text-sm"
+              placeholder={t("inventoryJsonPlaceholder")}
+              value={value.inventoryJson}
+              onChange={(e) =>
+                onChange({ ...value, inventoryJson: e.target.value })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("inventoryJsonHint")}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {value.stages.map((stage, index) => (
+              <div key={index} className="space-y-4 rounded-md border p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t("stageNumber", { number: index + 1 })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeStage(index)}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t("stageName")}</Label>
+                    <Input
+                      placeholder={t("stageNamePlaceholder")}
+                      value={stage.name}
+                      onChange={(e) =>
+                        updateStage(index, { name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("executionStrategy")}</Label>
+                    <Select
+                      value={stage.strategy}
+                      onValueChange={(next) =>
+                        updateStage(index, {
+                          strategy: next as StageStrategy,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="serial">
+                          {t("strategySerial")}
+                        </SelectItem>
+                        <SelectItem value="parallel">
+                          {t("strategyParallel")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t("maxParallel")}</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder={t("maxParallelPlaceholder")}
+                      value={stage.maxParallel}
+                      onChange={(e) =>
+                        updateStage(index, { maxParallel: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border px-4 py-3">
+                    <div className="space-y-0.5">
+                      <Label>{t("stageFailFast")}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("stageFailFastHint")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={stage.failFast}
+                      onCheckedChange={(checked) =>
+                        updateStage(index, { failFast: checked })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("targetGroups")}</Label>
+                  <Input
+                    placeholder={t("targetGroupsPlaceholder")}
+                    value={stage.targetGroups}
+                    onChange={(e) =>
+                      updateStage(index, { targetGroups: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("targetsJson")}</Label>
+                  <Textarea
+                    className="min-h-[120px] font-mono text-sm"
+                    placeholder={t("targetsJsonPlaceholder")}
+                    value={stage.targetsJson}
+                    onChange={(e) =>
+                      updateStage(index, { targetsJson: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("targetsJsonHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("actionKind")}</Label>
+                  <Select
+                    value={stage.actionKind}
+                    onValueChange={(next) =>
+                      updateStage(index, {
+                        actionKind: next as OrchestrationActionKind,
+                        actionJson: defaultActionJson(
+                          next as OrchestrationActionKind
+                        ),
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tx_block">
+                        {t("actionKindTxBlock")}
+                      </SelectItem>
+                      <SelectItem value="tx_workflow">
+                        {t("actionKindTxWorkflow")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("actionJson")}</Label>
+                  <Textarea
+                    className="min-h-[180px] font-mono text-sm"
+                    placeholder={t("actionJsonPlaceholder")}
+                    value={stage.actionJson}
+                    onChange={(e) =>
+                      updateStage(index, { actionJson: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("actionJsonHint")}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addStage}
+              className="w-full"
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              {t("addStage")}
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -273,65 +526,151 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
 }
 
 export function buildOrchestratePayload(data: OrchestrateFormData): Record<string, unknown> {
-  if (data.useRawJson) {
-    try {
-      return { plan: JSON.parse(data.rawJson) };
-    } catch {
-      return { plan: {} };
-    }
-  }
+  const plan = data.useRawJson
+    ? (() => {
+        try {
+          return JSON.parse(data.rawJson);
+        } catch {
+          return {};
+        }
+      })()
+    : buildPlanJson(data);
 
   return {
-    plan: {
-      stages: data.stages.map((s) => ({
-        name: s.name,
-        strategy: s.strategy,
-        targets: s.targets.split(",").map((t) => t.trim()).filter(Boolean),
-        action:
-          s.action_type === "exec"
-            ? { command: s.action_command }
-            : { template: s.action_template },
-      })),
-    },
+    plan,
+    ...(data.baseDir.trim() ? { base_dir: data.baseDir.trim() } : {}),
   };
 }
 
-export function validateOrchestrateForm(data: OrchestrateFormData, t: (key: string, params?: Record<string, string | number | Date>) => string): string | null {
+export function validateOrchestrateForm(
+  data: OrchestrateFormData,
+  t: (key: string, params?: Record<string, string | number | Date>) => string
+): string | null {
   if (data.useRawJson) {
-    if (!data.rawJson.trim()) return t("enterOrchestratePlanJson");
+    if (!data.rawJson.trim()) {
+      return t("enterOrchestratePlanJson");
+    }
+
     try {
-      const parsed = JSON.parse(data.rawJson);
-      if (!parsed.stages) return t("jsonMustContainStages");
+      const parsed = JSON.parse(data.rawJson) as { stages?: unknown };
+      if (!Array.isArray(parsed.stages)) {
+        return t("jsonMustContainStages");
+      }
     } catch {
       return t("invalidJson");
     }
+
     return null;
   }
 
-  if (data.stages.length === 0) return t("addAtLeastOneStage");
-  for (let i = 0; i < data.stages.length; i++) {
-    const s = data.stages[i];
-    if (!s.name.trim()) return t("stageNameEmpty", { number: i + 1 });
-    if (!s.targets.trim()) return t("stageTargetsEmpty", { number: i + 1 });
-    if (s.action_type === "exec" && !s.action_command.trim())
-      return t("stageCommandEmpty", { number: i + 1 });
-    if (s.action_type === "template" && !s.action_template.trim())
-      return t("stageTemplateEmpty", { number: i + 1 });
+  if (!data.name.trim()) {
+    return t("planNameRequired");
   }
+
+  if (data.inventoryJson.trim()) {
+    try {
+      const parsed = JSON.parse(data.inventoryJson);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return t("invalidInventoryJson");
+      }
+    } catch {
+      return t("invalidInventoryJson");
+    }
+  }
+
+  if (data.stages.length === 0) {
+    return t("addAtLeastOneStage");
+  }
+
+  for (let i = 0; i < data.stages.length; i += 1) {
+    const stage = data.stages[i];
+
+    if (!stage.name.trim()) {
+      return t("stageNameEmpty", { number: i + 1 });
+    }
+
+    if (!stage.targetGroups.trim() && !stage.targetsJson.trim()) {
+      return t("stageNeedsTargetSelector", { number: i + 1 });
+    }
+
+    if (
+      stage.maxParallel.trim() &&
+      parseOptionalPositiveInt(stage.maxParallel) === undefined
+    ) {
+      return t("positiveIntegerRequired");
+    }
+
+    if (stage.targetsJson.trim()) {
+      try {
+        const parsed = JSON.parse(stage.targetsJson);
+        if (!Array.isArray(parsed)) {
+          return t("invalidTargetsJson");
+        }
+      } catch {
+        return t("invalidTargetsJson");
+      }
+    }
+
+    if (!stage.actionJson.trim()) {
+      return t("actionJsonRequired", { number: i + 1 });
+    }
+
+    try {
+      const parsed = JSON.parse(stage.actionJson) as Record<string, unknown>;
+
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return t("invalidActionJson", { number: i + 1 });
+      }
+
+      if (stage.actionKind === "tx_block") {
+        const hasTemplate = hasNonEmptyString(parsed.template);
+        const hasCommands =
+          Array.isArray(parsed.commands) &&
+          parsed.commands.some((item) => hasNonEmptyString(item));
+
+        if (!hasTemplate && !hasCommands) {
+          return t("orchestrateTxBlockActionNeedsCommandsOrTemplate", {
+            number: i + 1,
+          });
+        }
+
+        if (
+          parsed.rollback_trigger_step_index !== undefined &&
+          parsed.rollback_trigger_step_index !== null &&
+          !hasNonEmptyString(parsed.resource_rollback_command)
+        ) {
+          return t("txBlockRollbackTriggerRequiresResourceRollback");
+        }
+      }
+
+      if (stage.actionKind === "tx_workflow") {
+        const hasWorkflowFile = hasNonEmptyString(parsed.workflow_file);
+        const hasWorkflow =
+          Object.prototype.hasOwnProperty.call(parsed, "workflow") &&
+          parsed.workflow !== null &&
+          parsed.workflow !== undefined;
+
+        if (hasWorkflowFile === hasWorkflow) {
+          return t("orchestrateWorkflowActionRequiresExactlyOneSource", {
+            number: i + 1,
+          });
+        }
+      }
+    } catch {
+      return t("invalidActionJson", { number: i + 1 });
+    }
+  }
+
   return null;
 }
 
 export const defaultOrchestrateFormData: OrchestrateFormData = {
-  stages: [
-    {
-      name: "",
-      strategy: "serial",
-      targets: "",
-      action_type: "exec",
-      action_command: "",
-      action_template: "",
-    },
-  ],
+  name: "",
+  failFast: true,
+  inventoryFile: "",
+  inventoryJson: "",
+  baseDir: "",
+  stages: [defaultStage()],
   rawJson: "",
   useRawJson: false,
 };

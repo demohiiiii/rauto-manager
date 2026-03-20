@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -145,6 +146,7 @@ function TaskCardSkeleton() {
 export default function TasksPage() {
   const t = useTranslations("tasks");
   const tc = useTranslations("common");
+  const router = useRouter();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailTask, setDetailTask] = useState<(Task & { executionHistory?: ExecutionHistory[] }) | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -247,7 +249,16 @@ export default function TasksPage() {
               onClick={() => setCreateDialogOpen(true)}
             >
               <Plus className="h-4 w-4 mr-2" />
-              {t("createTask")}
+              {t("createSimpleTask")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="hover-scale"
+              onClick={() => router.push("/tasks/designer")}
+            >
+              <GitBranch className="h-4 w-4 mr-2" />
+              {t("openComplexDesigner")}
             </Button>
           </div>
         </div>
