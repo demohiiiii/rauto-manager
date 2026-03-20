@@ -9,7 +9,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationPanel } from "@/components/notification-panel";
 import { useTranslations } from "next-intl";
 
-export function AppHeader() {
+type AppHeaderProps = {
+  onToggleSidebar?: () => void;
+};
+
+export function AppHeader({ onToggleSidebar }: AppHeaderProps) {
   const router = useRouter();
   const t = useTranslations("nav");
   const tc = useTranslations("common");
@@ -30,13 +34,17 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-300">
-      {/* Mobile Menu Button */}
-      <Button variant="ghost" size="icon" className="md:hidden">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="md:hidden"
+        onClick={onToggleSidebar}
+        aria-label={t("toggleSidebar")}
+      >
         <Menu className="h-5 w-5" />
       </Button>
 
-      {/* Search */}
       <form className="flex-1 max-w-xl" onSubmit={handleSubmit}>
         <div className="flex items-center gap-2">
           <div className="relative group flex-1">
@@ -65,15 +73,9 @@ export function AppHeader() {
         </div>
       </form>
 
-      {/* Right Actions */}
       <div className="flex items-center gap-2">
-        {/* Theme Toggle */}
         <ThemeToggle />
-
-        {/* Notifications */}
         <NotificationPanel />
-
-        {/* System Status */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-sm transition-all duration-300 hover:bg-green-500/20">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <span className="font-medium">{tc("systemNormal")}</span>

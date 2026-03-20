@@ -65,6 +65,18 @@
     --input: hsl(240 5.9% 88%);
     --ring: hsl(240 5.9% 10%);
     --radius: 0.5rem;
+    --flow-surface: hsl(0 0% 100%);
+    --flow-grid: rgba(100, 116, 139, 0.18);
+    --flow-edge: hsl(215 16% 42%);
+    --flow-edge-selected: var(--primary);
+    --flow-minimap-mask: rgba(148, 163, 184, 0.16);
+    --flow-minimap-node: hsl(215 16% 65%);
+    --flow-handle: hsl(215 20% 35%);
+    --flow-handle-selected: hsl(217 91% 60%);
+    --flow-node-selected-border: hsl(217 91% 60%);
+    --flow-node-selected-shadow: 0 0 0 1px rgba(59, 130, 246, 0.32), 0 0 0 5px rgba(59, 130, 246, 0.1), 0 18px 36px rgba(15, 23, 42, 0.14);
+    --flow-edge-glow: rgba(15, 23, 42, 0.08);
+    --flow-edge-selected-glow: rgba(59, 130, 246, 0.28);
 
     /* Sidebar - Light */
     --sidebar: hsl(0 0% 98%);
@@ -97,6 +109,18 @@
     --border: hsl(217 33% 20%);
     --input: hsl(217 33% 20%);
     --ring: hsl(176 100% 50%);
+    --flow-surface: hsl(222 30% 10%);
+    --flow-grid: rgba(148, 163, 184, 0.22);
+    --flow-edge: hsl(210 16% 72%);
+    --flow-edge-selected: var(--primary);
+    --flow-minimap-mask: rgba(2, 6, 23, 0.58);
+    --flow-minimap-node: hsl(215 16% 60%);
+    --flow-handle: hsl(210 16% 82%);
+    --flow-handle-selected: hsl(176 100% 50%);
+    --flow-node-selected-border: hsl(176 100% 50%);
+    --flow-node-selected-shadow: 0 0 0 1px rgba(34, 211, 238, 0.58), 0 0 0 5px rgba(34, 211, 238, 0.16), 0 24px 44px rgba(2, 6, 23, 0.72);
+    --flow-edge-glow: rgba(2, 6, 23, 0.22);
+    --flow-edge-selected-glow: rgba(34, 211, 238, 0.34);
 
     /* Sidebar - Dark */
     --sidebar: hsl(240 5.9% 10%);
@@ -249,4 +273,109 @@
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
+}
+
+/* ===== ReactFlow Canvas Theme ===== */
+.rauto-flow-canvas {
+  --xy-background-color: transparent;
+  --xy-background-pattern-color: var(--flow-grid);
+  --xy-minimap-background-color: var(--flow-surface);
+  --xy-minimap-mask-background-color: var(--flow-minimap-mask);
+  --xy-minimap-node-background-color: var(--flow-minimap-node);
+}
+
+.rauto-flow-canvas .react-flow__controls {
+  background: var(--flow-surface);
+  border-color: var(--border);
+}
+
+.rauto-flow-canvas .react-flow__controls button {
+  background: var(--flow-surface);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.rauto-flow-canvas .react-flow__controls button:hover {
+  background: var(--accent);
+}
+
+.rauto-flow-canvas .react-flow__controls button path {
+  fill: currentColor;
+}
+
+.rauto-flow-canvas .react-flow__minimap {
+  background: var(--flow-surface);
+  border-color: var(--border);
+}
+
+.rauto-flow-canvas .react-flow__minimap-mask {
+  fill: var(--flow-minimap-mask);
+}
+
+.rauto-flow-canvas .react-flow__minimap-node {
+  fill: var(--flow-minimap-node);
+  stroke: var(--border);
+}
+
+.rauto-flow-canvas .react-flow__background {
+  background: transparent;
+}
+
+.rauto-flow-canvas .react-flow__edge-path {
+  stroke: var(--flow-edge);
+  stroke-width: 2.25;
+  filter: drop-shadow(0 0 0.6px var(--flow-edge-glow));
+}
+
+.rauto-flow-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--flow-edge-selected);
+  stroke-width: 2.75;
+  filter: drop-shadow(0 0 6px var(--flow-edge-selected-glow));
+}
+
+.rauto-flow-canvas .react-flow__edge-textwrapper {
+  color: var(--foreground);
+}
+
+.rauto-flow-canvas .react-flow__arrowhead,
+.rauto-flow-canvas .react-flow__arrowhead path {
+  fill: var(--flow-edge);
+  stroke: var(--flow-edge);
+}
+
+.rauto-flow-canvas .react-flow__edge.selected .react-flow__arrowhead,
+.rauto-flow-canvas .react-flow__edge.selected .react-flow__arrowhead path {
+  fill: var(--flow-edge-selected);
+  stroke: var(--flow-edge-selected);
+}
+
+.rauto-flow-canvas .react-flow__handle {
+  background: var(--flow-handle);
+  border-color: var(--card);
+}
+
+.rauto-flow-canvas .react-flow__node .rauto-flow-node-card,
+.rauto-flow-canvas .react-flow__node .rauto-flow-entry-node {
+  transition:
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease,
+    background-color 150ms ease;
+}
+
+.rauto-flow-canvas .react-flow__node.selected .rauto-flow-node-card {
+  border-color: var(--flow-node-selected-border) !important;
+  box-shadow: var(--flow-node-selected-shadow) !important;
+  transform: translateY(-1px);
+}
+
+.rauto-flow-canvas .react-flow__node.selected .rauto-flow-node-card .rauto-flow-node-icon {
+  background: color-mix(in srgb, var(--flow-node-selected-border) 16%, var(--muted));
+  color: var(--flow-node-selected-border);
+}
+
+.rauto-flow-canvas .react-flow__node.selected .react-flow__handle {
+  background: var(--flow-handle-selected);
+  border-color: var(--flow-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--flow-handle-selected) 22%, transparent);
 }
