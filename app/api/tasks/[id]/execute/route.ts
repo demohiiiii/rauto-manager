@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
+import {
+  dispatchToAgent,
+  isAsyncDispatchType,
+} from "@/lib/dispatch";
+import { getDefaultRecordLevelForType } from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import type { DispatchType } from "@/lib/types";
 import type { Prisma } from "@prisma/client";
@@ -116,7 +120,9 @@ export async function POST(
       | Record<string, unknown>
       | undefined;
     const dryRun = payload.dry_run as boolean | undefined;
-    const recordLevel = payload.record_level as string | undefined;
+    const recordLevel =
+      (payload.record_level as string | undefined) ??
+      getDefaultRecordLevelForType(dispatchType);
 
     // Build a clean payload without the meta field
     const { connection: _conn, dry_run: _dry, record_level: _rec, ...purePayload } = payload;

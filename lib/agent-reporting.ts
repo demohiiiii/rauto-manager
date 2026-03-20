@@ -182,6 +182,97 @@ function serializeResult(value: Prisma.InputJsonValue | undefined): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldKeepValue(value: unknown): boolean {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  return true;
+}
+
+function deepMergeJsonObjects(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>
+): Prisma.InputJsonValue {
+  const merged: Record<string, unknown> = { ...existing };
+
+  for (const [key, incomingValue] of Object.entries(incoming)) {
+    const existingValue = merged[key];
+
+    if (isPlainObject(existingValue) && isPlainObject(incomingValue)) {
+      merged[key] = deepMergeJsonObjects(existingValue, incomingValue);
+      continue;
+    }
+
+    if (!shouldKeepValue(incomingValue) && shouldKeepValue(existingValue)) {
+      continue;
+    }
+
+    merged[key] = incomingValue;
+  }
+
+  return JSON.parse(JSON.stringify(merged)) as Prisma.InputJsonValue;
+}
+
+function mergeResultPayload(
+  existing: unknown,
+  incoming: Prisma.InputJsonValue | undefined
+): Prisma.InputJsonValue | undefined {
+  if (incoming === undefined) {
+    return cloneJsonValue(existing);
+  }
+
+  const normalizedExisting = cloneJsonValue(existing);
+  if (!isPlainObject(normalizedExisting) || !isPlainObject(incoming)) {
+    return incoming;
+  }
+
+  return deepMergeJsonObjects(normalizedExisting, incoming);
+}
+
+function mergeSerializedResult(existing: string, incoming: string): string {
+  if (!existing.trim()) {
+    return incoming;
+  }
+
+  if (!incoming.trim()) {
+    return existing;
+  }
+
+  try {
+    const existingParsed = JSON.parse(existing) as unknown;
+    const incomingParsed = JSON.parse(incoming) as unknown;
+    const merged = mergeResultPayload(existingParsed, cloneJsonValue(incomingParsed));
+    return serializeResult(merged);
+  } catch {
+    return incoming;
+  }
+}
+
 function normalizeInputJsonValue(
   value: unknown,
   field: string
@@ -294,19 +385,111 @@ function summarizeTaskCommand(task: {
   }
 }
 
+function normalizeTerminalEventResult(
+  eventType: "completed" | "failed",
+  message: string,
+  details: Prisma.InputJsonValue | undefined
+): Prisma.InputJsonValue {
+  const success = eventType === "completed";
+  const detailsObject = asJsonObject(details);
+
+  if (detailsObject) {
+    return {
+      ...detailsObject,
+      success,
+      ...(success ? {} : { error: message }),
+    };
+  }
+
+  if (details !== undefined) {
+    return {
+      success,
+      ...(success ? {} : { error: message }),
+      result: details,
+    };
+  }
+
+  return success
+    ? { success: true }
+    : {
+        success: false,
+        error: message,
+      };
+}
+
+async function upsertExecutionHistory(
+  tx: Prisma.TransactionClient,
+  input: {
+    taskId: string;
+    agentId: string;
+    command: string;
+    output: string;
+    status: "success" | "failed";
+    executionTime: number;
+  }
+) {
+  const existing = await tx.executionHistory.findFirst({
+    where: {
+      taskId: input.taskId,
+      agentId: input.agentId,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (existing) {
+    return tx.executionHistory.update({
+      where: { id: existing.id },
+      data: {
+        command: input.command,
+        output: mergeSerializedResult(existing.output, input.output),
+        status: input.status,
+        executionTime: input.executionTime,
+      },
+    });
+  }
+
+  return tx.executionHistory.create({
+    data: input,
+  });
+}
+
 function normalizeTaskCallbackResult(
   input: TaskCallbackReportInput
 ): Prisma.InputJsonValue {
+  const parsed = parseOptionalJson(input.result_json, "result_json");
+  const normalized =
+    normalizeInputJsonValue(input.result, "result") ?? parsed;
+
   if (input.status === "success") {
-    const parsed = parseOptionalJson(input.result_json, "result_json");
-    return normalizeInputJsonValue(input.result, "result") ?? parsed ?? {
+    return normalized ?? {
       success: true,
+    };
+  }
+
+  const errorMessage = input.error?.trim() || "Unknown error";
+  const normalizedObject = asJsonObject(normalized);
+
+  if (normalizedObject) {
+    return {
+      ...normalizedObject,
+      success: false,
+      error: errorMessage,
+    };
+  }
+
+  if (normalized !== undefined) {
+    return {
+      success: false,
+      error: errorMessage,
+      result: normalized,
     };
   }
 
   return {
     success: false,
-    error: input.error?.trim() || "Unknown error",
+    error: errorMessage,
   };
 }
 
@@ -749,6 +932,12 @@ export async function reportTaskExecutionEvent(
   const occurredAt = parseOptionalDate(input.occurred_at, "occurred_at");
   const progress = parseOptionalProgress(input.progress);
   const level = input.level ?? "info";
+  const terminalStatus =
+    eventType === "completed"
+      ? "success"
+      : eventType === "failed"
+        ? "failed"
+        : null;
 
   if (!["info", "success", "warning", "error"].includes(level)) {
     throw reportingError(
@@ -760,12 +949,29 @@ export async function reportTaskExecutionEvent(
   const details =
     normalizeInputJsonValue(input.details, "details") ??
     parseOptionalJson(input.details_json, "details_json");
+  const t = await getSystemTranslator();
 
-  await prisma.$transaction(async (tx) => {
+  const notification =
+    await prisma.$transaction(async (tx): Promise<{
+      taskName: string;
+      agentId: string;
+      dispatchType: string;
+      status: "success" | "failed";
+    } | null> => {
     const [task, agent] = await Promise.all([
       tx.task.findUnique({
         where: { id: taskId },
-        select: { id: true, status: true, startedAt: true },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          startedAt: true,
+          completedAt: true,
+          result: true,
+          dispatchType: true,
+          template: true,
+          payload: true,
+        },
       }),
       tx.agent.findUnique({
         where: { name: agentName },
@@ -807,41 +1013,132 @@ export async function reportTaskExecutionEvent(
     });
 
     const isActiveTask = ["pending", "queued", "running"].includes(task.status);
+    const isTerminalEvent = terminalStatus !== null;
 
-    if (!isActiveTask) {
-      return;
+    if (!isActiveTask && !isTerminalEvent) {
+      return null;
     }
 
     if (eventType === "completed") {
+      const resultData =
+        mergeResultPayload(
+          task.result,
+          normalizeTerminalEventResult("completed", message, details)
+        ) ?? { success: true };
+      const completedAt = occurredAt ?? task.completedAt ?? new Date();
+      const startedAt = task.startedAt ?? occurredAt ?? new Date();
+      const executionTime = Math.max(
+        0,
+        completedAt.getTime() - startedAt.getTime()
+      );
+
       await tx.task.update({
         where: { id: taskId },
         data: {
           status: "success",
-          startedAt: task.startedAt ?? occurredAt ?? new Date(),
-          completedAt: occurredAt ?? new Date(),
-          result: {
-            success: true,
-          },
+          startedAt,
+          completedAt,
+          result: resultData,
         },
       });
-      return;
+
+      await upsertExecutionHistory(tx, {
+        taskId,
+        agentId: agent.id,
+        command: summarizeTaskCommand(task),
+        output: serializeResult(resultData),
+        status: "success",
+        executionTime,
+      });
+      return isActiveTask || task.status !== "success"
+        ? {
+            taskName: task.name,
+            agentId: agent.id,
+            dispatchType: task.dispatchType,
+            status: "success" as const,
+          }
+        : null;
     }
 
     if (eventType === "failed") {
+      const resultData =
+        mergeResultPayload(
+          task.result,
+          normalizeTerminalEventResult("failed", message, details)
+        ) ?? {
+          success: false,
+          error: message,
+        };
+      const completedAt = occurredAt ?? task.completedAt ?? new Date();
+      const startedAt = task.startedAt ?? occurredAt ?? new Date();
+      const executionTime = Math.max(
+        0,
+        completedAt.getTime() - startedAt.getTime()
+      );
+
       await tx.task.update({
         where: { id: taskId },
         data: {
           status: "failed",
-          startedAt: task.startedAt ?? occurredAt ?? new Date(),
-          completedAt: occurredAt ?? new Date(),
-          result: {
-            success: false,
-            error: message,
-          },
+          startedAt,
+          completedAt,
+          result: resultData,
         },
       });
+
+      await upsertExecutionHistory(tx, {
+        taskId,
+        agentId: agent.id,
+        command: summarizeTaskCommand(task),
+        output: serializeResult(resultData),
+        status: "failed",
+        executionTime,
+      });
+      return isActiveTask || task.status !== "failed"
+        ? {
+            taskName: task.name,
+            agentId: agent.id,
+            dispatchType: task.dispatchType,
+            status: "failed" as const,
+          }
+        : null;
     }
+
+    return null;
   });
+
+  if (!notification) {
+    return;
+  }
+
+  createNotification({
+    type:
+      notification.status === "success" ? "task_success" : "task_failed",
+    title:
+      notification.status === "success"
+        ? t("notifications.taskSuccess")
+        : t("notifications.taskFailed"),
+    message:
+      notification.status === "success"
+        ? t("notifications.taskCompletedSuccess", {
+            name: agentName,
+            taskName: notification.taskName,
+          })
+        : t("notifications.taskCompletedFailed", {
+            name: agentName,
+            taskName: notification.taskName,
+            error: message,
+          }),
+    level: notification.status === "success" ? "success" : "error",
+    metadata: {
+      taskId,
+      agentId: notification.agentId,
+      agentName,
+      status: notification.status,
+      dispatchType: notification.dispatchType,
+      source: "task_event",
+    },
+  }).catch(() => {});
 }
 
 export async function reportTaskCallback(
@@ -880,28 +1177,27 @@ export async function reportTaskCallback(
       throw reportingError("NOT_FOUND", `Task not found: ${taskId}`);
     }
 
+    const mergedResultData = mergeResultPayload(task.result, resultData) ?? resultData;
+    const shouldNotify =
+      ["pending", "queued", "running"].includes(task.status) || task.status !== status;
+
     const updated = await tx.task.update({
       where: { id: taskId },
       data: {
         status,
         startedAt,
         completedAt: completedAt ?? new Date(),
-        result: resultData,
+        result: mergedResultData,
       },
     });
 
-    await tx.executionHistory.create({
-      data: {
-        taskId,
-        agentId: agent.id,
-        command: summarizeTaskCommand(task),
-        output:
-          status === "success"
-            ? serializeResult(resultData)
-            : input.error?.trim() || "Unknown error",
-        status,
-        executionTime: input.execution_time_ms ?? 0,
-      },
+    await upsertExecutionHistory(tx, {
+      taskId,
+      agentId: agent.id,
+      command: summarizeTaskCommand(task),
+      output: serializeResult(mergedResultData),
+      status: status as "success" | "failed",
+      executionTime: input.execution_time_ms ?? 0,
     });
 
     await tx.taskExecutionEvent.create({
@@ -924,13 +1220,17 @@ export async function reportTaskCallback(
                 error: input.error?.trim() || "Unknown error",
               }),
         progress: status === "success" ? 100 : undefined,
-        details: normalizeInputJsonValue(resultData, "result"),
+        details: normalizeInputJsonValue(mergedResultData, "result"),
         createdAt: completedAt ?? new Date(),
       },
     });
 
-    return { task: updated, agent };
+    return { task: updated, agent, shouldNotify };
   });
+
+  if (!updatedTask.shouldNotify) {
+    return;
+  }
 
   createNotification({
     type: status === "success" ? "task_success" : "task_failed",

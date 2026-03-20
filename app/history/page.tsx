@@ -241,7 +241,15 @@ export default function HistoryPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["history", deferredSearch, statusFilter, agentFilter],
+    queryKey: [
+      "history",
+      deferredSearch,
+      statusFilter,
+      agentFilter,
+      rangeFilter,
+      page,
+      limit,
+    ],
     queryFn: () =>
       apiClient.getExecutionHistory({
         search: deferredSearch || undefined,

@@ -6,6 +6,7 @@ import {
   registerAgent,
   reportAgentError,
   reportDevices,
+  reportTaskExecutionEvent,
   reportTaskCallback,
   sendHeartbeat,
   notifyOffline,
@@ -13,6 +14,7 @@ import {
   type AgentErrorReportInput,
   type ReportDevicesInput,
   type TaskCallbackReportInput,
+  type TaskExecutionEventReportInput,
   type UpdateDeviceStatusInput,
 } from "@/lib/agent-reporting";
 import { validateAgentHeaderValues } from "@/lib/agent-auth-core";
@@ -47,7 +49,8 @@ type GrpcRequest =
   | ReportDevicesInput
   | UpdateDeviceStatusInput
   | AgentErrorReportInput
-  | TaskCallbackReportInput;
+  | TaskCallbackReportInput
+  | TaskExecutionEventReportInput;
 
 type GrpcResponse =
   | AckResponse
@@ -70,6 +73,8 @@ const globalForGrpcServer = globalThis as typeof globalThis & {
   agentReportingGrpcShutdownHookRegistered?: boolean;
 };
 
+const DEFAULT_GRPC_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+
 function getGrpcPort(): number {
   const raw = process.env.MANAGER_GRPC_PORT?.trim() || "50051";
   const port = Number(raw);
@@ -83,6 +88,19 @@ function getGrpcPort(): number {
 
 function getGrpcHost(): string {
   return process.env.MANAGER_GRPC_HOST?.trim() || "0.0.0.0";
+}
+
+function getGrpcMaxMessageBytes(): number {
+  const raw =
+    process.env.MANAGER_GRPC_MAX_MESSAGE_BYTES?.trim() ||
+    String(DEFAULT_GRPC_MAX_MESSAGE_BYTES);
+  const size = Number(raw);
+
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new Error(`Invalid MANAGER_GRPC_MAX_MESSAGE_BYTES value: ${raw}`);
+  }
+
+  return size;
 }
 
 function loadAgentReportingServiceDefinition(): grpc.ServiceDefinition {
@@ -212,7 +230,11 @@ function bindServer(server: grpc.Server, host: string, port: number) {
 }
 
 async function startAgentReportingGrpcServer() {
-  const server = new grpc.Server();
+  const maxMessageBytes = getGrpcMaxMessageBytes();
+  const server = new grpc.Server({
+    "grpc.max_receive_message_length": maxMessageBytes,
+    "grpc.max_send_message_length": maxMessageBytes,
+  });
   const serviceDefinition = loadAgentReportingServiceDefinition();
 
   server.addService(serviceDefinition, {
@@ -272,6 +294,14 @@ async function startAgentReportingGrpcServer() {
         await reportTaskCallback(request);
         return { success: true };
       }),
+    ReportTaskEvent: (
+      call: grpc.ServerUnaryCall<TaskExecutionEventReportInput, AckResponse>,
+      callback: grpc.sendUnaryData<AckResponse>
+    ) =>
+      void handleUnary(call, callback, async (request) => {
+        await reportTaskExecutionEvent(request);
+        return { success: true };
+      }),
   });
 
   const host = getGrpcHost();
@@ -279,7 +309,9 @@ async function startAgentReportingGrpcServer() {
   const boundPort = await bindServer(server, host, port);
   registerShutdownHooks(server);
 
-  console.info(`Agent reporting gRPC server listening on ${host}:${boundPort}`);
+  console.info(
+    `Agent reporting gRPC server listening on ${host}:${boundPort} (max message ${maxMessageBytes} bytes)`
+  );
   return server;
 }
 

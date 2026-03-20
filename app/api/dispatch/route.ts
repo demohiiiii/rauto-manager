@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, DispatchRequest, DispatchType } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
+import {
+  dispatchToAgent,
+  isAsyncDispatchType,
+} from "@/lib/dispatch";
+import { getDefaultRecordLevelForType } from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 import { isAgentAvailableStatus } from "@/lib/utils";
@@ -105,6 +109,16 @@ export async function POST(request: NextRequest) {
     const typeLabel = t(`tasks.dispatchType.${body.type}`);
     const taskName = `[${typeLabel}] ${summarizePayload(body)}`;
     const asyncDispatch = isAsyncDispatchType(body.type);
+    const effectiveRecordLevel =
+      body.record_level ?? getDefaultRecordLevelForType(body.type);
+    const storedPayload: Record<string, unknown> = {
+      ...body.payload,
+      ...(body.connection ? { connection: body.connection } : {}),
+      ...(body.dry_run !== undefined ? { dry_run: body.dry_run } : {}),
+      ...(effectiveRecordLevel !== "Off"
+        ? { record_level: effectiveRecordLevel }
+        : {}),
+    };
 
     // Create the task record
     const task = await prisma.$transaction(async (tx) => {
@@ -113,7 +127,7 @@ export async function POST(request: NextRequest) {
           name: taskName,
           agentIds: [agent.id],
           dispatchType: body.type,
-          payload: body.payload as Prisma.InputJsonValue,
+          payload: storedPayload as Prisma.InputJsonValue,
           status: asyncDispatch ? "pending" : "running",
           startedAt: asyncDispatch ? undefined : new Date(),
         },
@@ -154,7 +168,7 @@ export async function POST(request: NextRequest) {
         connection: body.connection as Record<string, unknown> | undefined,
         payload: body.payload as Record<string, unknown>,
         dryRun: body.dry_run,
-        recordLevel: body.record_level,
+        recordLevel: effectiveRecordLevel,
       });
 
       const taskStatus = dispatchResult.executionMode === "async" ? "queued" : "running";

@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { OutputBlock } from "@/components/task-result/shared";
+import { ResultRenderer } from "@/components/task-result/result-renderer";
 import {
   CheckCircle2,
   Clock,
@@ -46,13 +47,20 @@ const DISPATCH_TYPE_CONFIG: Record<
   orchestrate: { icon: Network, labelKey: "multiDeviceOrchestrate" },
 };
 
-function formatOutput(output: string): string {
+function parseOutput(output: string): unknown {
   try {
-    const parsed = JSON.parse(output);
-    return JSON.stringify(parsed, null, 2);
+    return JSON.parse(output);
   } catch {
     return output;
   }
+}
+
+function formatOutput(output: unknown): string {
+  if (typeof output === "string") {
+    return output;
+  }
+
+  return JSON.stringify(output, null, 2);
 }
 
 function InfoRow({
@@ -88,6 +96,9 @@ export function HistoryDetailDialog({
 
   const statusConfig = STATUS_CONFIG[record.status];
   const StatusIcon = statusConfig.icon;
+  const parsedOutput = record.output ? parseOutput(record.output) : null;
+  const hasStructuredOutput =
+    parsedOutput !== null && typeof parsedOutput === "object";
   const dispatchType =
     record.task?.dispatchType && DISPATCH_TYPE_CONFIG[record.task.dispatchType]
       ? DISPATCH_TYPE_CONFIG[record.task.dispatchType]
@@ -156,19 +167,41 @@ export function HistoryDetailDialog({
           <Separator />
 
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">{t("rawOutput")}</h4>
+            <h4 className="text-sm font-medium">{t("structuredResult")}</h4>
             {record.output ? (
-              <OutputBlock
-                content={formatOutput(record.output)}
-                maxHeight="420px"
-                isError={record.status === "failed"}
-              />
+              record.task?.dispatchType && hasStructuredOutput ? (
+                <ResultRenderer
+                  dispatchType={record.task.dispatchType}
+                  result={parsedOutput}
+                />
+              ) : (
+                <OutputBlock
+                  content={formatOutput(parsedOutput)}
+                  maxHeight="420px"
+                  isError={record.status === "failed"}
+                />
+              )
             ) : (
               <p className="text-sm text-muted-foreground">
                 {t("outputUnavailable")}
               </p>
             )}
           </div>
+
+          {record.output && hasStructuredOutput && (
+            <details className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("rawPayload")}
+              </summary>
+              <div className="mt-3">
+                <OutputBlock
+                  content={formatOutput(parsedOutput)}
+                  maxHeight="320px"
+                  isError={record.status === "failed"}
+                />
+              </div>
+            </details>
+          )}
         </div>
       </DialogContent>
     </Dialog>

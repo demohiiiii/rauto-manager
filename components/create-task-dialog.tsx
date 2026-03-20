@@ -21,10 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import type { DispatchType } from "@/lib/types";
+import { getDefaultRecordLevelForType } from "@/lib/record-level";
 import { isAgentAvailableStatus } from "@/lib/utils";
 
 import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
@@ -67,7 +69,9 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const [dispatchType, setDispatchType] = useState<DispatchType>("exec");
   const [connectionName, setConnectionName] = useState("");
   const [dryRun, setDryRun] = useState(false);
-  const [recordLevel, setRecordLevel] = useState<"Off" | "KeyEventsOnly" | "Full">("Off");
+  const [recordLevel, setRecordLevel] = useState<"Off" | "KeyEventsOnly" | "Full">(
+    getDefaultRecordLevelForType("exec")
+  );
 
   // Form state
   const [execData, setExecData] = useState<ExecFormData>(defaultExecFormData);
@@ -79,6 +83,8 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   // Connection list
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
+  const defaultRecordLevel = getDefaultRecordLevelForType(dispatchType);
+  const shouldHighlightRecording = defaultRecordLevel !== "Off";
 
   const queryClient = useQueryClient();
 
@@ -124,7 +130,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     setDispatchType("exec");
     setConnectionName("");
     setDryRun(false);
-    setRecordLevel("Off");
+    setRecordLevel(getDefaultRecordLevelForType("exec"));
     setExecData(defaultExecFormData);
     setTemplateData(defaultTemplateFormData);
     setTxBlockData(defaultTxBlockFormData);
@@ -264,7 +270,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                   variant={dispatchType === type ? "default" : "outline"}
                   size="sm"
                   className="flex flex-col items-center gap-1 h-auto py-2"
-                  onClick={() => setDispatchType(type)}
+                  onClick={() => {
+                    const currentDefault = getDefaultRecordLevelForType(dispatchType);
+                    const nextDefault = getDefaultRecordLevelForType(type);
+                    setDispatchType(type);
+                    setRecordLevel((prev) =>
+                      prev === currentDefault ? nextDefault : prev
+                    );
+                  }}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="text-xs">{tc(labelKey)}</span>
@@ -327,21 +340,35 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 </Label>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <Label className="text-sm">Record Level</Label>
-              <Select
-                value={recordLevel}
-                onValueChange={(v) => setRecordLevel(v as "Off" | "KeyEventsOnly" | "Full")}
-              >
-                <SelectTrigger className="w-[150px] h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Off">Off</SelectItem>
-                  <SelectItem value="KeyEventsOnly">Key Events</SelectItem>
-                  <SelectItem value="Full">Full</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">{t("recordLevelLabel")}</Label>
+                {shouldHighlightRecording && (
+                  <Badge variant="secondary" className="h-5 px-2 text-[10px]">
+                    {t("recordLevelRecommended")}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={recordLevel}
+                  onValueChange={(v) => setRecordLevel(v as "Off" | "KeyEventsOnly" | "Full")}
+                >
+                  <SelectTrigger className="w-[170px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Off">{t("recordLevelOff")}</SelectItem>
+                    <SelectItem value="KeyEventsOnly">{t("recordLevelKeyEvents")}</SelectItem>
+                    <SelectItem value="Full">{t("recordLevelFull")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="max-w-md text-xs text-muted-foreground">
+                {shouldHighlightRecording
+                  ? t("recordLevelTxDescription")
+                  : t("recordLevelBasicDescription")}
+              </p>
             </div>
           </div>
 

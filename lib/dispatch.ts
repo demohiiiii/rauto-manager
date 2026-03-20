@@ -1,5 +1,6 @@
 import type { DispatchType } from "@/lib/types";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
+import { getDefaultRecordLevelForType } from "@/lib/record-level";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
@@ -63,6 +64,7 @@ const RECORD_LEVEL_MAP: Record<string, string> = {
  */
 function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
   const { type, taskId, callbackUrl, connection, payload, dryRun, recordLevel } = options;
+  const effectiveRecordLevel = recordLevel ?? getDefaultRecordLevelForType(type);
 
   const base: Record<string, unknown> = {
     ...payload,
@@ -81,8 +83,9 @@ function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
   }
 
   // Inject record_level after converting it to kebab-case
-  if (recordLevel) {
-    base.record_level = RECORD_LEVEL_MAP[recordLevel] ?? recordLevel;
+  if (effectiveRecordLevel && effectiveRecordLevel !== "Off") {
+    base.record_level =
+      RECORD_LEVEL_MAP[effectiveRecordLevel] ?? effectiveRecordLevel;
   }
 
   return base;

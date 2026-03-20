@@ -40,6 +40,10 @@ import type {
 } from "@/lib/types";
 import { PayloadRenderer } from "@/components/task-result/payload-renderer";
 import { ResultRenderer } from "@/components/task-result/result-renderer";
+import {
+  parseRecordingJsonl,
+  type RecordingEntry,
+} from "@/components/task-result/command-echo-table";
 import { OutputBlock } from "@/components/task-result/shared";
 import { apiClient } from "@/lib/api/client";
 
@@ -116,33 +120,13 @@ function InfoRow({
   );
 }
 
-interface RecordingEntry {
-  ts_ms: number;
-  event: {
-    kind: string;
-    command?: string;
-    mode?: string;
-    success?: boolean;
-    content?: string;
-    all?: string;
-    prompt_before?: string;
-    prompt_after?: string;
-  };
-}
-
-function parseRecordingJsonl(jsonlStr: string): RecordingEntry[] {
-  try {
-    return jsonlStr
-      .split("\n")
-      .filter((line) => line.trim())
-      .map((line) => JSON.parse(line))
-      .filter((entry) => entry.event?.kind === "command_output");
-  } catch {
-    return [];
-  }
-}
-
-function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
+function ExecutionHistoryTable({
+  history,
+  emptyText,
+}: {
+  history: ExecutionHistory[];
+  emptyText?: string;
+}) {
   const t = useTranslations("dialogs");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -168,14 +152,15 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
   history.forEach((h) => {
     try {
       const parsed = JSON.parse(h.output);
-      const recordingJsonl = parsed.recording_jsonl || "";
-      const entries = parseRecordingJsonl(recordingJsonl);
-      entries.forEach((entry, idx) => {
-        allEntries.push({
-          id: `${h.id}-${idx}`,
-          entry,
-          historyId: h.id,
-          createdAt: h.createdAt,
+      collectRecordingJsonlStrings(parsed).forEach((recordingJsonl, recordingIndex) => {
+        const entries = parseRecordingJsonl(recordingJsonl);
+        entries.forEach((entry, idx) => {
+          allEntries.push({
+            id: `${h.id}-${recordingIndex}-${idx}`,
+            entry,
+            historyId: h.id,
+            createdAt: h.createdAt,
+          });
         });
       });
     } catch {
@@ -186,7 +171,7 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
   if (allEntries.length === 0) {
     return (
       <div className="text-sm text-muted-foreground text-center py-4">
-        {t("taskDetailHistoryNoOutput")}
+        {emptyText ?? t("taskDetailHistoryNoOutput")}
       </div>
     );
   }
@@ -306,6 +291,94 @@ function ExecutionHistoryTable({ history }: { history: ExecutionHistory[] }) {
 
 function getLatestEvent(events: TaskExecutionEvent[]): TaskExecutionEvent | null {
   return events.length > 0 ? events[events.length - 1] : null;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function containsRecordingJsonl(value: unknown): boolean {
+  if (!value) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => containsRecordingJsonl(item));
+  }
+
+  const objectValue = asObject(value);
+  if (!objectValue) {
+    return false;
+  }
+
+  const recordingJsonl = objectValue.recording_jsonl;
+  if (typeof recordingJsonl === "string" && parseRecordingJsonl(recordingJsonl).length > 0) {
+    return true;
+  }
+
+  return Object.values(objectValue).some((item) => containsRecordingJsonl(item));
+}
+
+function collectRecordingJsonlStrings(value: unknown): string[] {
+  if (!value) {
+    return [];
+  }
+
+  if (typeof value === "string") {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectRecordingJsonlStrings(item));
+  }
+
+  const objectValue = asObject(value);
+  if (!objectValue) {
+    return [];
+  }
+
+  const results: string[] = [];
+  if (typeof objectValue.recording_jsonl === "string") {
+    results.push(objectValue.recording_jsonl);
+  }
+
+  for (const item of Object.values(objectValue)) {
+    results.push(...collectRecordingJsonlStrings(item));
+  }
+
+  return results;
+}
+
+function hasHistoryCommandEchoes(history: ExecutionHistory[]): boolean {
+  return history.some((record) => {
+    try {
+      const parsed = JSON.parse(record.output) as Record<string, unknown>;
+      return collectRecordingJsonlStrings(parsed).some(
+        (recordingJsonl) => parseRecordingJsonl(recordingJsonl).length > 0
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+function getConfiguredRecordLevel(
+  task: TaskDetailLike
+): "Off" | "KeyEventsOnly" | "Full" | null {
+  const payload = asObject(task.payload);
+  const value = payload?.record_level;
+  if (value === "Off" || value === "KeyEventsOnly" || value === "Full") {
+    return value;
+  }
+  return null;
 }
 
 function getLatestProgress(
@@ -446,8 +519,37 @@ export function TaskDetailDialog({
 
   const detailTask = data?.data ?? toFallbackTaskDetail(task);
   const executionEvents = detailTask.executionEvents ?? [];
+  const executionHistory = detailTask.executionHistory ?? [];
   const latestEvent = getLatestEvent(executionEvents);
   const currentProgress = getLatestProgress(detailTask, executionEvents);
+  const configuredRecordLevel = getConfiguredRecordLevel(detailTask);
+  const hasCommandEchoes =
+    containsRecordingJsonl(detailTask.result) || hasHistoryCommandEchoes(executionHistory);
+  const supportsCommandEchoHint = ["tx_block", "tx_workflow", "orchestrate"].includes(
+    detailTask.dispatchType
+  );
+  const shouldShowCommandEchoHint =
+    supportsCommandEchoHint &&
+    ["success", "failed", "cancelled"].includes(detailTask.status) &&
+    !hasCommandEchoes;
+  const commandEchoHintTitle =
+    configuredRecordLevel === "Off"
+      ? t("taskDetailRecordingDisabledTitle")
+      : configuredRecordLevel
+        ? t("taskDetailRecordingUnavailableTitle")
+        : t("taskDetailRecordingUnknownTitle");
+  const commandEchoHintDescription =
+    configuredRecordLevel === "Off"
+      ? t("taskDetailRecordingDisabledDescription")
+      : configuredRecordLevel
+        ? t("taskDetailRecordingUnavailableDescription")
+        : t("taskDetailRecordingUnknownDescription");
+  const historyEmptyText =
+    configuredRecordLevel === "Off"
+      ? t("taskDetailHistoryRecordingDisabled")
+      : configuredRecordLevel
+        ? t("taskDetailHistoryRecordingUnavailable")
+        : t("taskDetailHistoryNoOutput");
 
   const statusConfig =
     STATUS_CONFIG[detailTask.status] ?? STATUS_CONFIG.pending;
@@ -614,14 +716,27 @@ export function TaskDetailDialog({
               dispatchType={detailTask.dispatchType}
               result={detailTask.result}
             />
+            {shouldShowCommandEchoHint && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/20">
+                <p className="font-medium text-amber-900 dark:text-amber-200">
+                  {commandEchoHintTitle}
+                </p>
+                <p className="mt-1 text-amber-800/90 dark:text-amber-300">
+                  {commandEchoHintDescription}
+                </p>
+              </div>
+            )}
           </div>
 
-          {detailTask.executionHistory.length > 0 && (
+          {executionHistory.length > 0 && (
             <>
               <Separator />
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">{t("taskDetailHistory")}</h4>
-                <ExecutionHistoryTable history={detailTask.executionHistory} />
+                <ExecutionHistoryTable
+                  history={executionHistory}
+                  emptyText={historyEmptyText}
+                />
               </div>
             </>
           )}
