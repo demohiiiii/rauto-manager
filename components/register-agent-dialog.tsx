@@ -19,32 +19,78 @@ interface RegisterAgentDialogProps {
   children: React.ReactNode;
 }
 
+type ReportMode = "http" | "grpc";
+
 export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
   const t = useTranslations("dialogs");
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedMode, setCopiedMode] = useState<ReportMode | null>(null);
+  const [selectedMode, setSelectedMode] = useState<ReportMode>("http");
 
-  const managerUrl =
+  const httpManagerUrl =
     process.env.NEXT_PUBLIC_MANAGER_URL ||
     (typeof window !== "undefined"
       ? window.location.origin
       : "http://localhost:3000");
 
+  const grpcManagerUrl =
+    process.env.NEXT_PUBLIC_MANAGER_GRPC_URL ||
+    (() => {
+      try {
+        const parsed = new URL(httpManagerUrl);
+        return `${parsed.protocol}//${parsed.hostname}:50051`;
+      } catch {
+        return "http://localhost:50051";
+      }
+    })();
+
   const apiKey = process.env.NEXT_PUBLIC_AGENT_API_KEY || "rauto-agent-api-key-change-in-production";
 
-  // rauto registration command
-  const registerCommand = `rauto agent \\
-  --manager-url "${managerUrl}" \\
+  const commands: Array<{
+    mode: ReportMode;
+    title: string;
+    description: string;
+    managerUrl: string;
+    command: string;
+    note?: string;
+  }> = [
+    {
+      mode: "http",
+      title: t("reportModeHttp"),
+      description: t("registerAgentHttpDescription"),
+      managerUrl: httpManagerUrl,
+      command: `rauto agent \\
+  --manager-url "${httpManagerUrl}" \\
   --report-mode "http" \\
   --agent-name "my-agent" \\
-  --agent-token "${apiKey}"`;
+  --agent-token "${apiKey}"`,
+      note: t("httpModeNote"),
+    },
+    {
+      mode: "grpc",
+      title: t("reportModeGrpc"),
+      description: t("registerAgentGrpcDescription"),
+      managerUrl: grpcManagerUrl,
+      command: `rauto agent \\
+  --manager-url "${grpcManagerUrl}" \\
+  --report-mode "grpc" \\
+  --agent-name "my-agent" \\
+  --agent-token "${apiKey}"`,
+      note: t("grpcModeNote"),
+    },
+  ];
 
-  const handleCopy = async () => {
+  const selectedCommand =
+    commands.find((item) => item.mode === selectedMode) ?? commands[0];
+
+  const handleCopy = async (command: string, mode: ReportMode) => {
     try {
-      await navigator.clipboard.writeText(registerCommand);
-      setCopied(true);
+      await navigator.clipboard.writeText(command);
+      setCopiedMode(mode);
       toast.success(t("commandCopied"));
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopiedMode((current) => (current === mode ? null : current));
+      }, 2000);
     } catch (error) {
       toast.error(t("copyFailed"));
     }
@@ -55,66 +101,118 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            {t("registerAgentTitle")}
-          </DialogTitle>
-          <DialogDescription>
-            {t("registerAgentDescription")}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl overflow-hidden p-0 sm:max-h-[88vh]">
+        <div className="flex max-h-[88vh] flex-col">
+          <DialogHeader className="shrink-0 px-6 pb-0 pt-6">
+            <DialogTitle className="flex items-center gap-2 pr-8">
+              <Terminal className="h-5 w-5" />
+              {t("registerAgentTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("registerAgentDescription")}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Configuration info */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">{t("managerConfig")}</h4>
-            <div className="grid gap-2 text-sm">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="text-muted-foreground">{t("managerUrlLabel")}</span>
-                <code className="text-xs bg-background px-2 py-1 rounded">{managerUrl}</code>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="text-muted-foreground">{t("reportModeLabel")}</span>
-                <code className="text-xs bg-background px-2 py-1 rounded">http</code>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <span className="text-muted-foreground">API Key:</span>
-                <code className="text-xs bg-background px-2 py-1 rounded font-mono">
-                  {apiKey.slice(0, 20)}...
-                </code>
+          <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
+            <div className="space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-sm font-medium">{t("reportModeLabel")}</h4>
+              <div className="inline-flex rounded-xl border bg-muted/40 p-1">
+                {commands.map((item) => {
+                  const isActive = item.mode === selectedMode;
+                  return (
+                    <button
+                      key={item.mode}
+                      type="button"
+                      onClick={() => setSelectedMode(item.mode)}
+                      className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {item.title}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
 
-          {/* Command preview */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">{t("registerCommand")}</h4>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-                className="h-8 gap-2"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3 text-green-600" />
-                    <span className="text-xs">{t("copied")}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    <span className="text-xs">{t("copyCommand")}</span>
-                  </>
-                )}
-              </Button>
-            </div>
-            <div className="relative">
-              <pre className="p-4 rounded-lg bg-muted/50 border overflow-x-auto text-xs font-mono leading-relaxed">
-                {registerCommand}
-              </pre>
+            <div className="rounded-xl border bg-muted/20">
+              <div className="space-y-3 border-b p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold">{selectedCommand.title}</h4>
+                      <Badge variant="outline" className="font-mono uppercase">
+                        {selectedCommand.mode}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedCommand.description}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      handleCopy(selectedCommand.command, selectedCommand.mode)
+                    }
+                    className="h-8 gap-2 shrink-0"
+                  >
+                    {copiedMode === selectedCommand.mode ? (
+                      <>
+                        <Check className="h-3 w-3 text-green-600" />
+                        <span className="text-xs">{t("copied")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        <span className="text-xs">{t("copyCommand")}</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div className="rounded-lg bg-background/70 p-2">
+                    <div className="text-xs text-muted-foreground">
+                      {t("managerUrlLabel")}
+                    </div>
+                    <code className="mt-1 block truncate rounded bg-background px-2 py-1 text-xs">
+                      {selectedCommand.managerUrl}
+                    </code>
+                  </div>
+                  <div className="rounded-lg bg-background/70 p-2">
+                    <div className="text-xs text-muted-foreground">
+                      {t("reportModeLabel")}
+                    </div>
+                    <code className="mt-1 inline-flex rounded bg-background px-2 py-1 text-xs">
+                      {selectedCommand.mode}
+                    </code>
+                  </div>
+                  <div className="rounded-lg bg-background/70 p-2 sm:col-span-2">
+                    <div className="text-xs text-muted-foreground">API Key</div>
+                    <code className="mt-1 block truncate rounded bg-background px-2 py-1 font-mono text-xs">
+                      {apiKey.slice(0, 20)}...
+                    </code>
+                  </div>
+                </div>
+
+                {selectedCommand.note ? (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCommand.note}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2 p-4">
+                <h5 className="text-sm font-medium">{t("registerCommand")}</h5>
+                <pre className="overflow-x-auto rounded-lg border bg-background/70 p-4 text-xs font-mono leading-relaxed">
+                  {selectedCommand.command}
+                </pre>
+              </div>
             </div>
           </div>
 
@@ -169,6 +267,8 @@ export function RegisterAgentDialog({ children }: RegisterAgentDialogProps) {
               <ExternalLink className="h-3 w-3" />
               {t("viewDocs")}
             </Button>
+          </div>
+            </div>
           </div>
         </div>
       </DialogContent>

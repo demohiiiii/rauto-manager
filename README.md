@@ -7,9 +7,11 @@
 ![License](https://img.shields.io/badge/License-AGPL--3.0-f4c430)
 [中文文档](README_zh.md)
 
-`rauto-manager` is a self-hosted control plane for fleets of `rauto` agents. It adds a central web UI for agent registration, device inventory, task dispatch, execution history, notifications, and administrator access.
+`rauto-manager` is a self-hosted control plane for `rauto` agent fleets. It centralizes agent onboarding, shared device inventory, task dispatch, workflow/orchestration design, live execution tracking, notifications, and administrator access in one web UI.
 
-> Current implementation already includes admin setup/login, PostgreSQL persistence, agent heartbeat and offline handling, device sync, task callbacks, SSE notifications, runtime metrics, and English/Chinese UI support.
+- Manage agents over HTTP or gRPC from one control plane.
+- Use a simple task dialog for `exec`, `template`, and `tx_block`, plus a visual designer for `tx_workflow` and `orchestrate`.
+- Follow live task events, structured execution history, and notifications without logging into each agent separately.
 
 ## Deploy
 
@@ -36,12 +38,12 @@ Neon setup requirements:
 
 ## Features
 
-- Centralized agent lifecycle management: registration, heartbeat updates, offline reporting, runtime metrics, and agent-side error reports.
+- Centralized agent lifecycle management over HTTP or gRPC: registration, heartbeat updates, offline reporting, runtime metrics, health checks, and agent-side error reports.
 - Shared device inventory: add devices from the UI, sync inventory from agents, and track reachability updates over time.
-- Agent-aware task dispatch: supports `exec`, `template`, `tx_block`, `tx_workflow`, and `orchestrate`.
-- Operator workflow helpers: proxy connection list, template list, and device profile discovery from connected agents.
-- Safer onboarding flow: test a device connection before saving it into the agent and manager inventory.
-- Operations visibility: dashboard, notifications, recent activity, execution history, and live updates over Server-Sent Events.
+- Two task entry styles: a simple task dialog for `exec`, `template`, and `tx_block`, plus a visual workflow/orchestration designer for `tx_workflow` and `orchestrate`.
+- Agent-aware operator helpers: list/save connections, test connectivity, load templates, discover device profiles, and sync devices through the connected agent transport.
+- Live execution visibility: dashboard, notifications, task events, progress updates, execution history, and structured result rendering for transaction/workflow/orchestration tasks.
+- Built-in docs center: quick links to the `rauto-manager`, `rauto`, and `rneter` repositories from inside the UI.
 - Built-in admin bootstrap: first-run setup at `/setup`, JWT cookie auth, and localized UI messages in English and Chinese.
 
 ## Product Tour
@@ -60,11 +62,15 @@ Select an online agent, discover supported device profiles from that agent, test
 
 ### 4. Task Dispatch
 
-Pick an online agent, reuse a saved connection, and dispatch one of five execution types: `exec`, `template`, `tx_block`, `tx_workflow`, or `orchestrate`.
+Use the simple task dialog for day-to-day work such as `exec`, `template`, and `tx_block`, with saved connection reuse and transport-aware agent selection.
 
-### 5. History and Notifications
+### 5. Workflow / Orchestration Designer
 
-Follow task callbacks, execution results, device sync activity, and agent-side error reports from one place instead of chasing logs across multiple hosts.
+Open the visual designer to build `tx_workflow` and `orchestrate` payloads on a canvas instead of writing raw JSON by hand.
+
+### 6. History and Notifications
+
+Follow task callbacks, execution results, live task events, device sync activity, and agent-side error reports from one place instead of chasing logs across multiple hosts.
 
 ## Demo Flow
 
@@ -83,25 +89,35 @@ flowchart LR
 
 ## Screenshots
 
-Add your project screenshots under `docs/screenshots/` with the filenames below and GitHub will render them directly on the repository homepage.
+The screenshots below reflect the current UI and the main operator flows in `rauto-manager`.
 
 ### Dashboard Overview
+
+Operations summary for active agents, device reachability, daily task outcomes, and recent notifications.
 
 ![Dashboard overview](docs/screenshots/dashboard-overview.png)
 
 ### Agent Registration
 
+Copy a ready-to-run `rauto agent` command and bring a new agent online with the correct manager address and shared token.
+
 ![Agent registration dialog](docs/screenshots/agent-registration.png)
 
 ### Device Onboarding
+
+Select an agent, test the connection, and save the device into the manager inventory through the agent transport.
 
 ![Device onboarding dialog](docs/screenshots/device-onboarding.png)
 
 ### Task Dispatch
 
+Dispatch simple tasks directly from the main task page. Transaction workflows and orchestration flows are available through the visual `Workflow / Orchestration` designer.
+
 ![Task dispatch dialog](docs/screenshots/task-dispatch.png)
 
 ### Task Results
+
+Review callbacks, structured execution results, and history from one place instead of checking multiple hosts manually.
 
 ![Task results and execution history](docs/screenshots/task-results.png)
 
@@ -138,6 +154,9 @@ Optional but useful:
 - `NEXT_PUBLIC_MANAGER_URL`: if set, the UI uses this public base URL when generating the `rauto agent` command.
 - `AGENT_TIMEOUT`: manager-side timeout for stale agents.
 - `AGENT_HEARTBEAT_INTERVAL`: manager-side heartbeat interval hint shown in settings.
+- `MANAGER_GRPC_ENABLED`: set to `true` to start the manager gRPC reporting server in self-hosted Node deployments.
+- `MANAGER_GRPC_HOST` / `MANAGER_GRPC_PORT`: bind host and port for the manager gRPC reporting server. Default port is `50051`.
+- `MANAGER_GRPC_MAX_MESSAGE_BYTES`: max gRPC message size for task events and callbacks. Default is `16777216` (16 MB).
 
 ### 3. Apply database migrations
 
@@ -159,6 +178,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). On first boot, `/login` redirects to `/setup`, where you create the initial admin account.
+
+If you plan to use gRPC agents, run the manager in a self-hosted Node environment and set `MANAGER_GRPC_ENABLED=true`. The built-in gRPC listener is disabled on Vercel.
 
 ## Deploying To Vercel
 
@@ -185,6 +206,8 @@ Do not place migrations inside request handlers or Prisma client initialization.
 
 Use managed agent mode from the `rauto` project. The agent token must match `AGENT_API_KEY` on the manager side.
 
+### HTTP reporting mode
+
 ```bash
 rauto agent \
   --bind 0.0.0.0 \
@@ -195,14 +218,31 @@ rauto agent \
   --agent-token <same-agent-api-key>
 ```
 
+### gRPC reporting mode
+
+Use gRPC when the manager is self-hosted and reachable on its gRPC listener, for example `http://<manager-host>:50051`.
+
+```bash
+rauto agent \
+  --bind 0.0.0.0 \
+  --port 8123 \
+  --manager-url http://<manager-host>:50051 \
+  --report-mode grpc \
+  --agent-name edge-sh-01 \
+  --agent-token <same-agent-api-key>
+```
+
 Once connected, the manager can receive:
 
 - registration and heartbeat updates
 - offline notifications
 - full device inventory sync
 - incremental device reachability updates
+- live task execution events
 - task execution callbacks
 - async agent-side error reports
+
+For gRPC agents, manager-side control flows such as health check, connection list/save, template list, device profile discovery, connection test, device sync, and task dispatch also use gRPC instead of direct HTTP calls.
 
 ## Dispatch Types
 
@@ -214,9 +254,16 @@ Once connected, the manager can receive:
 | `tx_workflow` | Execute a workflow payload handled by the agent. |
 | `orchestrate` | Submit a multi-step orchestration plan. |
 
+In the UI:
+
+- The simple task dialog is used for `exec`, `template`, and `tx_block`.
+- The `Workflow / Orchestration` designer is used for `tx_workflow` and `orchestrate`.
+
 ## Agent Compatibility
 
-For the full UI workflow, connect a recent `rauto agent` that exposes these APIs:
+For the full UI workflow, connect a recent `rauto agent`.
+
+In HTTP mode, the agent should expose these APIs:
 
 - `GET /api/connections`
 - `PUT /api/connections/{name}`
@@ -225,7 +272,18 @@ For the full UI workflow, connect a recent `rauto agent` that exposes these APIs
 - `GET /api/device-profiles/all`
 - `POST /api/devices/probe`
 
-`rauto-manager` already proxies these endpoints to power connection selection, device profile discovery, template selection, connection testing, and device sync from the web UI.
+In gRPC mode, the agent should implement the equivalent RPCs in `AgentTaskService` / `AgentReportingService`, including:
+
+- task dispatch
+- task event reporting
+- task callback reporting
+- connection list/save
+- connection test
+- template list
+- device profile list
+- device probing / sync
+
+`rauto-manager` will automatically choose HTTP or gRPC based on the agent report mode saved on the manager side.
 
 ## Project Layout
 
