@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: AgentOfflineInput = await request.json();
-    await notifyOffline(body);
+    await notifyOffline(body, { reportMode: "http" });
 
     const response: ApiResponse<null> = { success: true };
     return agentReportingJson(response);

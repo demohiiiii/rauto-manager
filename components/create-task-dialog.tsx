@@ -27,7 +27,7 @@ import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import type { DispatchType } from "@/lib/types";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
 
 import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
 import { TemplateForm, buildTemplatePayload, validateTemplateForm, defaultTemplateFormData, type TemplateFormData } from "@/components/task-forms/template-form";
@@ -236,7 +236,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 ) : (
                   availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} ({agent.host}:{agent.port})
+                      {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
                     </SelectItem>
                   ))
                 )}

@@ -1,9 +1,12 @@
 // Agent-related types
+export type AgentReportMode = "http" | "grpc";
+
 export interface Agent {
   id: string;
   name: string;
   host: string;
   port: number;
+  reportMode: AgentReportMode;
   status: "online" | "busy" | "offline" | "error";
   lastHeartbeat: Date;
   capabilities: string[];
@@ -21,6 +24,7 @@ export interface AgentCreateInput {
   name: string;
   host: string;
   port: number;
+  reportMode?: AgentReportMode;
   capabilities?: string[];
 }
 
@@ -226,6 +230,7 @@ export interface ConnectionPayload {
   password?: string;
   port?: number;
   enable_password?: string;
+  ssh_security?: string;
   device_profile?: string;
   template_dir?: string;
 }

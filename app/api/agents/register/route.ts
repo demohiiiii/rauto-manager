@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: AgentRegisterInput = await request.json();
-    const agent = await registerAgent(body);
+    const agent = await registerAgent(body, { reportMode: "http" });
 
     const response: ApiResponse<{ id: string; name: string; status: string }> =
       {

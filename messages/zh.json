@@ -129,7 +129,8 @@
     "healthCheck": "健康检查",
     "statusOnline": "在线",
     "statusOffline": "离线",
-    "statusError": "异常"
+    "statusError": "异常",
+    "connectionMethod": "连接方式"
   },
   "devices": {
     "title": "设备管理",

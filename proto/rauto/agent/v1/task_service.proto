@@ -1,0 +1,236 @@
+syntax = "proto3";
+
+package rauto.agent.v1;
+
+service AgentTaskService {
+  rpc GetAgentInfo(AgentInfoRequest) returns (AgentInfoResponse);
+  rpc GetAgentStatus(AgentStatusRequest) returns (AgentStatusResponse);
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  rpc UpsertConnection(UpsertConnectionRequest) returns (UpsertConnectionResponse);
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ListDeviceProfiles(ListDeviceProfilesRequest) returns (ListDeviceProfilesResponse);
+  rpc ProbeDevices(ProbeDevicesRequest) returns (ProbeDevicesResponse);
+  rpc ExecuteCommand(ExecuteCommandRequest) returns (ExecuteCommandResponse);
+  rpc ExecuteTemplate(ExecuteTemplateRequest) returns (ExecuteTemplateResponse);
+  rpc ExecuteTxBlock(ExecuteTxBlockRequest) returns (ExecuteTxBlockResponse);
+  rpc ExecuteTxBlockAsync(ExecuteTxBlockRequest) returns (AcceptedTaskResponse);
+  rpc ExecuteTxWorkflowAsync(ExecuteTxWorkflowRequest) returns (AcceptedTaskResponse);
+  rpc ExecuteOrchestrationAsync(ExecuteOrchestrationRequest) returns (AcceptedTaskResponse);
+}
+
+message AgentInfoRequest {}
+
+message AgentStatusRequest {}
+
+message ListConnectionsRequest {}
+
+message ConnectionRef {
+  string connection_name = 1;
+  string host = 2;
+  string username = 3;
+  string password = 4;
+  optional uint32 port = 5;
+  string enable_password = 6;
+  string ssh_security = 7;
+  string device_profile = 8;
+}
+
+message ConnectionMeta {
+  string name = 1;
+  string host = 2;
+  uint32 port = 3;
+  string device_profile = 4;
+  bool has_password = 5;
+}
+
+message ListConnectionsResponse {
+  repeated ConnectionMeta connections = 1;
+}
+
+message UpsertConnectionRequest {
+  string name = 1;
+  ConnectionRef connection = 2;
+  bool save_password = 3;
+}
+
+message UpsertConnectionResponse {
+  string name = 1;
+  string path = 2;
+  bool has_password = 3;
+  ConnectionRef connection = 4;
+}
+
+message TestConnectionRequest {
+  ConnectionRef connection = 1;
+}
+
+message TestConnectionResponse {
+  bool ok = 1;
+  string host = 2;
+  uint32 port = 3;
+  string username = 4;
+  string ssh_security = 5;
+  string device_profile = 6;
+}
+
+message ListTemplatesRequest {}
+
+message TemplateMeta {
+  string name = 1;
+  string path = 2;
+}
+
+message ListTemplatesResponse {
+  repeated TemplateMeta templates = 1;
+}
+
+message ListDeviceProfilesRequest {}
+
+message BuiltinProfileMeta {
+  string name = 1;
+  repeated string aliases = 2;
+  string summary = 3;
+}
+
+message CustomProfileMeta {
+  string name = 1;
+  string path = 2;
+}
+
+message ListDeviceProfilesResponse {
+  repeated BuiltinProfileMeta builtins = 1;
+  repeated CustomProfileMeta custom = 2;
+  repeated string all = 3;
+}
+
+message ExecuteCommandRequest {
+  string task_id = 1;
+  string command = 2;
+  string mode = 3;
+  ConnectionRef connection = 4;
+  string record_level = 5;
+}
+
+message ExecuteTemplateRequest {
+  string task_id = 1;
+  string template = 2;
+  string vars_json = 3;
+  string mode = 4;
+  bool dry_run = 5;
+  ConnectionRef connection = 6;
+  string record_level = 7;
+}
+
+message ExecuteTxBlockRequest {
+  string task_id = 1;
+  string name = 2;
+  string template = 3;
+  string vars_json = 4;
+  repeated string commands = 5;
+  repeated string rollback_commands = 6;
+  bool rollback_on_failure = 7;
+  optional uint32 rollback_trigger_step_index = 8;
+  string mode = 9;
+  optional uint64 timeout_secs = 10;
+  string resource_rollback_command = 11;
+  string template_profile = 12;
+  bool dry_run = 13;
+  ConnectionRef connection = 14;
+  string record_level = 15;
+}
+
+message ExecuteTxWorkflowRequest {
+  string task_id = 1;
+  string workflow_json = 2;
+  bool dry_run = 3;
+  ConnectionRef connection = 4;
+  string record_level = 5;
+}
+
+message ExecuteOrchestrationRequest {
+  string task_id = 1;
+  string plan_json = 2;
+  string base_dir = 3;
+  bool dry_run = 4;
+  string record_level = 5;
+}
+
+message AcceptedTaskResponse {
+  bool accepted = 1;
+  string task_id = 2;
+  string operation = 3;
+  string status = 4;
+}
+
+message ExecuteCommandResponse {
+  string output = 1;
+  optional string recording_jsonl = 2;
+}
+
+message CommandExecutionResult {
+  string command = 1;
+  bool success = 2;
+  optional string output = 3;
+  optional string error = 4;
+}
+
+message ExecuteTemplateResponse {
+  string rendered_commands = 1;
+  repeated CommandExecutionResult executed = 2;
+  optional string recording_jsonl = 3;
+}
+
+message ExecuteTxBlockResponse {
+  string tx_block_json = 1;
+  optional string tx_result_json = 2;
+  optional string recording_jsonl = 3;
+}
+
+message AgentInfoResponse {
+  string name = 1;
+  string version = 2;
+  repeated string capabilities = 3;
+  uint64 uptime_seconds = 4;
+  uint32 connections_count = 5;
+  uint32 templates_count = 6;
+  uint32 custom_profiles_count = 7;
+  bool managed = 8;
+}
+
+message SystemInfo {
+  string os = 1;
+  string arch = 2;
+  string hostname = 3;
+}
+
+message AgentStatusResponse {
+  string status = 1;
+  uint32 active_sessions = 2;
+  uint32 running_tasks = 3;
+  string last_heartbeat_at = 4;
+  string registered_at = 5;
+  SystemInfo system = 6;
+}
+
+message ProbeDevicesRequest {
+  repeated string connections = 1;
+  uint32 timeout_secs = 2;
+}
+
+message DeviceProbeResult {
+  string name = 1;
+  string host = 2;
+  uint32 port = 3;
+  string device_profile = 4;
+  bool reachable = 5;
+  optional uint64 latency_ms = 6;
+  string error = 7;
+}
+
+message ProbeDevicesResponse {
+  repeated DeviceProbeResult results = 1;
+  uint32 total = 2;
+  uint32 reachable_count = 3;
+  uint32 unreachable_count = 4;
+}

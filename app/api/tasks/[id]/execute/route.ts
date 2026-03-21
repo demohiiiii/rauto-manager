@@ -129,7 +129,11 @@ export async function POST(
 
     try {
       const dispatchResult = await dispatchToAgent({
-        agent: { host: agent.host, port: agent.port },
+        agent: {
+          host: agent.host,
+          port: agent.port,
+          reportMode: agent.reportMode === "grpc" ? "grpc" : "http",
+        },
         type: dispatchType,
         taskId: task.id,
         callbackUrl,

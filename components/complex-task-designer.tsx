@@ -41,7 +41,7 @@ import {
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { isAgentAvailableStatus, cn } from "@/lib/utils";
+import { isAgentAvailableStatus, cn, formatAgentReportMode } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -980,7 +980,7 @@ export function ComplexTaskDesigner() {
                                   ) : (
                                     availableAgents.map((agent) => (
                                       <SelectItem key={agent.id} value={agent.id}>
-                                        {agent.name} ({agent.host}:{agent.port})
+                                        {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
                                       </SelectItem>
                                     ))
                                   )}

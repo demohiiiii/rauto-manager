@@ -1,6 +1,7 @@
-import type { DispatchType } from "@/lib/types";
+import { dispatchTaskOverGrpc } from "@/lib/agent-task-grpc";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
+import type { AgentReportMode, DispatchType } from "@/lib/types";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
@@ -9,8 +10,8 @@ const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
   "orchestrate",
 ]);
 
-// Map dispatch types to rauto Agent API endpoints
-const DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
+// Map dispatch types to rauto Agent HTTP API endpoints
+const HTTP_DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
   exec: "/api/exec",
   template: "/api/template/execute",
   tx_block: "/api/tx/block/async",
@@ -30,6 +31,7 @@ const DISPATCH_TIMEOUT_MAP: Record<DispatchType, number> = {
 interface AgentInfo {
   host: string;
   port: number;
+  reportMode?: AgentReportMode;
 }
 
 interface DispatchOptions {
@@ -62,7 +64,7 @@ const RECORD_LEVEL_MAP: Record<string, string> = {
  * Build the full request payload sent to the agent.
  * Convert the Manager dispatch request into the format accepted by rauto Agent.
  */
-function buildAgentPayload(options: DispatchOptions): Record<string, unknown> {
+function buildHttpAgentPayload(options: DispatchOptions): Record<string, unknown> {
   const { type, taskId, callbackUrl, connection, payload, dryRun, recordLevel } = options;
   const effectiveRecordLevel = recordLevel ?? getDefaultRecordLevelForType(type);
 
@@ -125,13 +127,28 @@ export async function dispatchToAgent(
 ): Promise<AgentDispatchResult> {
   const { agent, type } = options;
 
-  const endpoint = DISPATCH_ENDPOINT_MAP[type];
   const timeoutMs = DISPATCH_TIMEOUT_MAP[type];
   const executionMode: AgentDispatchExecutionMode = isAsyncDispatchType(type)
     ? "async"
     : "sync";
+  const reportMode = agent.reportMode ?? "http";
+
+  if (reportMode === "grpc") {
+    const response = await dispatchTaskOverGrpc({
+      ...options,
+      timeoutMs,
+    });
+
+    return {
+      response,
+      statusCode: executionMode === "async" ? 202 : 200,
+      executionMode,
+    };
+  }
+
+  const endpoint = HTTP_DISPATCH_ENDPOINT_MAP[type];
   const url = `http://${agent.host}:${agent.port}${endpoint}`;
-  const body = buildAgentPayload(options);
+  const body = buildHttpAgentPayload(options);
 
   const response = await fetch(url, {
     method: "POST",

@@ -40,7 +40,7 @@ import {
 import type { Agent } from "@/lib/types";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
 
 function AgentStatusBadge({ status }: { status: Agent["status"] }) {
   const t = useTranslations("agents");
@@ -77,6 +77,24 @@ function AgentStatusBadge({ status }: { status: Agent["status"] }) {
     <Badge variant={variant} className={className}>
       <Icon className="h-3 w-3 mr-1" />
       {t(labelKey)}
+    </Badge>
+  );
+}
+
+function AgentConnectionBadge({
+  reportMode,
+}: {
+  reportMode?: Agent["reportMode"];
+}) {
+  const mode = formatAgentReportMode(reportMode);
+  const className =
+    mode === "gRPC"
+      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+      : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+
+  return (
+    <Badge variant="outline" className={className}>
+      {mode}
     </Badge>
   );
 }
@@ -123,8 +141,17 @@ export default function AgentsPage() {
       return { agent, result };
     },
     onSuccess: ({ agent, result }) => {
+      const transportLabel =
+        result.data?.transport === "grpc"
+          ? "gRPC"
+          : result.data?.transport === "http"
+            ? "HTTP"
+            : null;
+
       if (result.success && result.data?.healthy) {
-        toast.success(`${agent.name}: ${t("healthCheck")} OK`);
+        toast.success(
+          `${agent.name}: ${t("healthCheck")} OK${transportLabel ? ` (${transportLabel})` : ""}`
+        );
       } else {
         toast.error(
           `${agent.name}: ${result.error ?? `${t("healthCheck")} failed`}`
@@ -297,6 +324,16 @@ export default function AgentsPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{tc("version")}</span>
                     <span className="font-medium">{agent.version ?? tc("unknown")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t("connectionMethod")}</span>
+                    <AgentConnectionBadge reportMode={agent.reportMode} />
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{td("agentDetailLastHeartbeat")}</span>
+                    <span className="font-medium text-right text-xs">
+                      {new Date(agent.lastHeartbeat).toLocaleString()}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{tc("capabilities")}</span>

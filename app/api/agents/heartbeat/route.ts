@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: AgentHeartbeatInput = await request.json();
-    await sendHeartbeat(body);
+    await sendHeartbeat(body, { reportMode: "http" });
 
     const response: ApiResponse<null> = { success: true };
     return agentReportingJson(response);

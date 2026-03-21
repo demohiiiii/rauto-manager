@@ -243,7 +243,7 @@ async function startAgentReportingGrpcServer() {
       callback: grpc.sendUnaryData<RegisterAgentResponse>
     ) =>
       void handleUnary(call, callback, async (request) => {
-        await registerAgent(request);
+        await registerAgent(request, { reportMode: "grpc" });
         return { success: true };
       }),
     SendHeartbeat: (
@@ -251,7 +251,7 @@ async function startAgentReportingGrpcServer() {
       callback: grpc.sendUnaryData<AckResponse>
     ) =>
       void handleUnary(call, callback, async (request) => {
-        await sendHeartbeat(request);
+        await sendHeartbeat(request, { reportMode: "grpc" });
         return { success: true };
       }),
     NotifyOffline: (
@@ -259,7 +259,7 @@ async function startAgentReportingGrpcServer() {
       callback: grpc.sendUnaryData<AckResponse>
     ) =>
       void handleUnary(call, callback, async (request) => {
-        await notifyOffline(request);
+        await notifyOffline(request, { reportMode: "grpc" });
         return { success: true };
       }),
     ReportDevices: (

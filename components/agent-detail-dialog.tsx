@@ -25,6 +25,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { formatAgentReportMode } from "@/lib/utils";
 
 const STATUS_CONFIG = {
   online: {
@@ -151,6 +152,18 @@ export function AgentDetailDialog({
               <span className="font-mono text-xs">
                 {agent.host}:{agent.port}
               </span>
+            </InfoRow>
+            <InfoRow label={t("connectionMethod")}>
+              <Badge
+                variant="outline"
+                className={
+                  formatAgentReportMode(agent.reportMode) === "gRPC"
+                    ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                }
+              >
+                {formatAgentReportMode(agent.reportMode)}
+              </Badge>
             </InfoRow>
             <InfoRow label={tc("version")}>
               {agent.version ?? tc("notSet")}

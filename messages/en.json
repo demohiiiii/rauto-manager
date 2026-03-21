@@ -129,7 +129,8 @@
     "healthCheck": "Health Check",
     "statusOnline": "Online",
     "statusOffline": "Offline",
-    "statusError": "Error"
+    "statusError": "Error",
+    "connectionMethod": "Connection Method"
   },
   "devices": {
     "title": "Device Management",

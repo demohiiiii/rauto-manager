@@ -14,6 +14,7 @@ model Agent {
   name          String   @unique
   host          String
   port          Int
+  reportMode    String   @default("http") // http, grpc
   status        String   @default("offline") // online, offline, error
   lastHeartbeat DateTime @default(now())
   capabilities  String[] @default([])

@@ -68,7 +68,12 @@ class ApiClient {
   }
 
   async checkAgentHealth(id: string): Promise<
-    ApiResponse<{ healthy: boolean; agentStatus?: string; payload?: unknown }>
+    ApiResponse<{
+      healthy: boolean;
+      agentStatus?: string;
+      payload?: unknown;
+      transport?: "http" | "grpc";
+    }>
   > {
     const { data } = await this.client.get(`/agents/${id}/health`);
     return data;

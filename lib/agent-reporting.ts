@@ -7,6 +7,7 @@ import type {
   AgentHeartbeatInput,
   AgentOfflineInput,
   AgentRegisterInput,
+  AgentReportMode,
   TaskExecutionEventLevel,
 } from "@/lib/types";
 
@@ -89,6 +90,10 @@ export interface TaskExecutionEventReportInput {
   details?: unknown;
   details_json?: string | null;
   occurred_at?: string;
+}
+
+interface AgentReportingTransportOptions {
+  reportMode?: AgentReportMode;
 }
 
 function reportingError(
@@ -516,17 +521,22 @@ function handlePrismaNotFound(error: unknown, message: string): never {
   throw error;
 }
 
-export async function registerAgent(input: AgentRegisterInput) {
+export async function registerAgent(
+  input: AgentRegisterInput,
+  options: AgentReportingTransportOptions = {}
+) {
   const name = requireString(input.name, "name");
   const host = requireString(input.host, "host");
   const port = requirePositivePort(input.port, "port");
   const t = await getSystemTranslator();
+  const reportMode = options.reportMode ?? "http";
 
   const agent = await prisma.agent.upsert({
     where: { name },
     update: {
       host,
       port,
+      reportMode,
       status: "online",
       lastHeartbeat: new Date(),
       version: input.version?.trim() || null,
@@ -541,6 +551,7 @@ export async function registerAgent(input: AgentRegisterInput) {
       name,
       host,
       port,
+      reportMode,
       status: "online",
       lastHeartbeat: new Date(),
       version: input.version?.trim() || null,
@@ -569,14 +580,19 @@ export async function registerAgent(input: AgentRegisterInput) {
   };
 }
 
-export async function sendHeartbeat(input: AgentHeartbeatInput): Promise<void> {
+export async function sendHeartbeat(
+  input: AgentHeartbeatInput,
+  options: AgentReportingTransportOptions = {}
+): Promise<void> {
   const name = requireString(input.name, "name");
+  const reportMode = options.reportMode ?? "http";
 
   try {
     await prisma.agent.update({
       where: { name },
       data: {
         lastHeartbeat: new Date(),
+        reportMode,
         status: input.status?.trim() || "online",
         activeSessions: input.active_sessions ?? undefined,
         runningTasksCount: input.running_tasks ?? undefined,
@@ -593,14 +609,19 @@ export async function sendHeartbeat(input: AgentHeartbeatInput): Promise<void> {
   }
 }
 
-export async function notifyOffline(input: AgentOfflineInput): Promise<void> {
+export async function notifyOffline(
+  input: AgentOfflineInput,
+  options: AgentReportingTransportOptions = {}
+): Promise<void> {
   const name = requireString(input.name, "name");
   const t = await getSystemTranslator();
+  const reportMode = options.reportMode ?? "http";
 
   try {
     await prisma.agent.update({
       where: { name },
       data: {
+        reportMode,
         status: "offline",
         activeSessions: 0,
         runningTasksCount: 0,
@@ -620,7 +641,9 @@ export async function notifyOffline(input: AgentOfflineInput): Promise<void> {
   }).catch(() => {});
 }
 
-export async function reportDevices(input: ReportDevicesInput): Promise<{ synced: number }> {
+export async function reportDevices(
+  input: ReportDevicesInput
+): Promise<{ synced: number }> {
   const name = requireString(input.name, "name");
   if (!Array.isArray(input.devices)) {
     throw reportingError("INVALID_ARGUMENT", "Field devices must be an array");

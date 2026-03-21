@@ -1,9 +1,19 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { Device } from "@/lib/types";
+import type { AgentReportMode, Device } from "@/lib/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+export function normalizeAgentReportMode(
+  mode?: string | null
+): AgentReportMode {
+  return mode === "grpc" ? "grpc" : "http";
+}
+
+export function formatAgentReportMode(mode?: string | null): "HTTP" | "gRPC" {
+  return normalizeAgentReportMode(mode) === "grpc" ? "gRPC" : "HTTP";
 }
 
 /**

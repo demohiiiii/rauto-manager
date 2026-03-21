@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  isGrpcMethodUnavailable,
+  listTemplatesOverGrpc,
+} from "@/lib/agent-task-grpc";
 import { prisma } from "@/lib/prisma";
 import { isAgentAvailableStatus } from "@/lib/utils";
 
@@ -32,6 +36,35 @@ export async function GET(
         { success: false, error: "Agent 当前不在线" },
         { status: 400 }
       );
+    }
+
+    if (agent.reportMode === "grpc") {
+      try {
+        const result = await listTemplatesOverGrpc({
+          agent: { host: agent.host, port: agent.port, reportMode: "grpc" },
+          timeoutMs: AGENT_TIMEOUT_MS,
+        });
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            templates: Array.isArray(result.templates) ? result.templates : [],
+          },
+        });
+      } catch (error) {
+        if (isGrpcMethodUnavailable(error)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "当前 agent 尚未实现 gRPC ListTemplates RPC，暂时无法获取模板列表",
+            },
+            { status: 501 }
+          );
+        }
+
+        throw error;
+      }
     }
 
     const agentToken = process.env.AGENT_API_KEY || "";

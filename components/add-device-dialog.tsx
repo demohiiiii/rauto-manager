@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
 
 interface AddDeviceDialogProps {
   children: React.ReactNode;
@@ -249,7 +249,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
                 ) : (
                   availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} ({agent.host}:{agent.port})
+                      {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
                     </SelectItem>
                   ))
                 )}

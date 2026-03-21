@@ -46,6 +46,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { formatAgentReportMode } from "@/lib/utils";
 
 const DISPATCH_TYPE_CONFIG: Record<
   DispatchType,
@@ -403,7 +404,7 @@ export default function HistoryPage() {
                   <SelectItem value="all">{t("allAgents")}</SelectItem>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
+                      {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
                     </SelectItem>
                   ))}
                 </SelectContent>
