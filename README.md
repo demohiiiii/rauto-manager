@@ -68,15 +68,12 @@ This repository is best suited for self-hosted operator workflows where agents m
 
 ```mermaid
 flowchart LR
-    A["Operator in Browser"] --> B["rauto-manager"]
-    B --> C["Agent Registration / Heartbeat"]
-    C --> D["rauto agent"]
-    B --> E["Task Dispatch"]
-    E --> D
-    D --> F["Network Devices"]
-    D --> G["Task Events / Callback / Device Sync / Error Report"]
-    G --> B
-    B --> H["Dashboard / History / Notifications"]
+    browser[Browser] --> manager[rauto-manager]
+    manager -->|Register Heartbeat| agent[rauto agent]
+    manager -->|Dispatch Tasks| agent
+    agent --> devices[Network Devices]
+    agent -->|Events Callback Sync Errors| manager
+    manager --> views[Dashboard History Notifications]
 ```
 
 ## Screenshots

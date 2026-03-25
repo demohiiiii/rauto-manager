@@ -68,15 +68,12 @@
 
 ```mermaid
 flowchart LR
-    A["浏览器中的运维人员"] --> B["rauto-manager"]
-    B --> C["Agent 注册 / 心跳"]
-    C --> D["rauto agent"]
-    B --> E["任务下发"]
-    E --> D
-    D --> F["网络设备"]
-    D --> G["任务事件 / 回调 / 设备同步 / 错误上报"]
-    G --> B
-    B --> H["仪表盘 / 历史 / 通知"]
+    browser[浏览器] --> manager[rauto-manager]
+    manager -->|注册 心跳| agent[rauto agent]
+    manager -->|任务下发| agent
+    agent --> devices[网络设备]
+    agent -->|事件 回调 同步 错误| manager
+    manager --> views[仪表盘 历史 通知]
 ```
 
 ## 截图展示
