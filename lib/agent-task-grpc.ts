@@ -26,6 +26,7 @@ type GrpcDispatchMethod =
   | "TestConnection"
   | "ListTemplates"
   | "ListDeviceProfiles"
+  | "ListProfileModes"
   | "ProbeDevices"
   | "ExecuteCommand"
   | "ExecuteTemplate"
@@ -445,6 +446,20 @@ export async function listDeviceProfilesOverGrpc(
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "ListDeviceProfiles", {}, options.timeoutMs);
+}
+
+export async function listProfileModesOverGrpc(options: {
+  agent: GrpcAgentInfo;
+  timeoutMs: number;
+  name: string;
+}): Promise<GrpcResponsePayload> {
+  const client = createClient(`${options.agent.host}:${options.agent.port}`);
+  return callUnaryMethod(
+    client,
+    "ListProfileModes",
+    { name: options.name },
+    options.timeoutMs
+  );
 }
 
 export async function probeDevicesOverGrpc(options: {

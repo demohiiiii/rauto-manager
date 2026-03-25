@@ -41,7 +41,13 @@ import {
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { isAgentAvailableStatus, cn, formatAgentReportMode } from "@/lib/utils";
+import { AUTO_PROFILE_MODE, normalizeDeviceProfileModes } from "@/lib/profile-mode";
+import {
+  isAgentAvailableStatus,
+  cn,
+  formatAgentConnectionLabel,
+  formatAgentReportMode,
+} from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,7 +69,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { DispatchType } from "@/lib/types";
+import type { AgentConnection, DeviceProfileModes, DispatchType } from "@/lib/types";
 import {
   buildTxWorkflowPayload,
   validateTxWorkflowForm,
@@ -82,18 +88,12 @@ type ComplexDispatchType = Extract<DispatchType, "tx_workflow" | "orchestrate">;
 type RecordLevel = "Off" | "KeyEventsOnly" | "Full";
 type WorkflowBlockKind = "config" | "show";
 type WorkflowRollbackPolicy = "per_step" | "none" | "whole_resource";
-type TxMode = "Enable" | "Config";
+type TxMode = string;
 type StageStrategy = "serial" | "parallel";
 type OrchestrationActionKind = "tx_block" | "tx_workflow";
 type InspectorTab = "config" | "summary";
 
-interface ConnectionItem {
-  name: string;
-  host?: string;
-  port?: number;
-  device_profile?: string;
-  has_password?: boolean;
-}
+const WORKFLOW_PROFILE_MODE_SUPPORTED_TYPES: ComplexDispatchType[] = ["tx_workflow"];
 
 interface EntryNodeData extends Record<string, unknown> {
   kind: "entry";
@@ -122,7 +122,7 @@ function makeId(prefix: string): string {
 
 function defaultWorkflowStep(): TxWorkflowStepFormData {
   return {
-    mode: "Config",
+    mode: AUTO_PROFILE_MODE as TxWorkflowStepFormData["mode"],
     command: "",
     timeoutSecs: "",
     rollbackCommand: "",
@@ -136,7 +136,7 @@ function defaultWorkflowBlock(): TxWorkflowBlockFormData {
     kind: "config",
     failFast: true,
     rollbackPolicy: "per_step",
-    wholeResourceMode: "Config",
+    wholeResourceMode: AUTO_PROFILE_MODE as TxWorkflowBlockFormData["wholeResourceMode"],
     wholeResourceUndoCommand: "",
     wholeResourceTimeoutSecs: "",
     wholeResourceTriggerStepIndex: "",
@@ -156,7 +156,6 @@ function defaultOrchestrateStage(): OrchestrateStageFormData {
     actionJson: JSON.stringify(
       {
         name: "stage-change",
-        mode: "Config",
         commands: ["show version"],
       },
       null,
@@ -407,8 +406,11 @@ export function ComplexTaskDesigner() {
   const [mode, setMode] = useState<ComplexDispatchType>("tx_workflow");
   const [agentId, setAgentId] = useState("");
   const [connectionName, setConnectionName] = useState("");
-  const [connections, setConnections] = useState<ConnectionItem[]>([]);
+  const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [loadingProfileModes, setLoadingProfileModes] = useState(false);
+  const [profileModesError, setProfileModesError] = useState<string | null>(null);
   const [dryRun, setDryRun] = useState(false);
   const [recordLevel, setRecordLevel] = useState<RecordLevel>(
     getDefaultRecordLevelForType("tx_workflow")
@@ -504,6 +506,8 @@ export function ComplexTaskDesigner() {
   const availableAgents = (agentsData?.data ?? []).filter((agent) =>
     isAgentAvailableStatus(agent.status)
   );
+  const selectedConnection = connections.find((connection) => connection.name === connectionName);
+  const selectedDeviceProfile = selectedConnection?.device_profile?.trim() || "";
 
   useEffect(() => {
     const initialX = typeof window !== "undefined" && window.innerWidth < 640 ? 260 : 320;
@@ -517,6 +521,8 @@ export function ComplexTaskDesigner() {
     setSelectedNodeId(initialContentNode.id);
     setInspectorTab("config");
     setConnectionName("");
+    setProfileModes(null);
+    setProfileModesError(null);
     setRecordLevel(getDefaultRecordLevelForType(mode));
   }, [mode, setEdges, setNodes]);
 
@@ -550,6 +556,114 @@ export function ComplexTaskDesigner() {
 
     fetchConnections();
   }, [agentId, td, tc]);
+
+  useEffect(() => {
+    const shouldResolveProfileModes =
+      WORKFLOW_PROFILE_MODE_SUPPORTED_TYPES.includes(mode) &&
+      Boolean(agentId) &&
+      Boolean(selectedDeviceProfile);
+
+    if (!shouldResolveProfileModes) {
+      setProfileModes(null);
+      setProfileModesError(null);
+      setLoadingProfileModes(false);
+      return;
+    }
+
+    if (
+      selectedConnection?.default_mode &&
+      Array.isArray(selectedConnection.available_modes)
+    ) {
+      setProfileModes(
+        normalizeDeviceProfileModes({
+          name: selectedDeviceProfile,
+          default_mode: selectedConnection.default_mode,
+          modes: selectedConnection.available_modes,
+        })
+      );
+      setProfileModesError(null);
+      setLoadingProfileModes(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchProfileModes = async () => {
+      setLoadingProfileModes(true);
+      setProfileModesError(null);
+
+      try {
+        const result = await apiClient.getAgentDeviceProfileModes(
+          agentId,
+          selectedDeviceProfile
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (result.success && result.data) {
+          setProfileModes(normalizeDeviceProfileModes(result.data));
+        } else {
+          setProfileModes(null);
+          setProfileModesError(result.error ?? tc("unknownError"));
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setProfileModes(null);
+        setProfileModesError(
+          error instanceof Error ? error.message : tc("unknownError")
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingProfileModes(false);
+        }
+      }
+    };
+
+    fetchProfileModes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agentId,
+    mode,
+    selectedConnection?.available_modes,
+    selectedConnection?.default_mode,
+    selectedDeviceProfile,
+    tc,
+  ]);
+
+  const workflowModeSelectionSupported =
+    mode === "tx_workflow" &&
+    Boolean(connectionName) &&
+    Boolean(selectedDeviceProfile) &&
+    !loadingProfileModes &&
+    Array.isArray(profileModes?.modes) &&
+    profileModes.modes.length > 0;
+  const workflowModeOptions = workflowModeSelectionSupported
+    ? profileModes?.modes ?? []
+    : [];
+  const workflowModeHint = !connectionName
+    ? tf("profileModeSelectConnectionHint")
+    : !selectedDeviceProfile
+      ? tf("profileModeNoProfileHint")
+      : loadingProfileModes
+        ? tf("profileModeLoading")
+        : profileModes
+          ? tf("profileModeDefaultHint", {
+              profile: selectedDeviceProfile,
+              defaultMode: profileModes.default_mode,
+            })
+          : profileModesError
+            ? tf("profileModeUnavailableHint", {
+                profile: selectedDeviceProfile,
+              })
+            : tf("profileModeAutoHint");
 
   const orderedNodes = getOrderedContentNodes(nodes, edges);
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
@@ -1023,8 +1137,7 @@ export function ComplexTaskDesigner() {
                                             key={connection.name}
                                             value={connection.name}
                                           >
-                                            {connection.name}
-                                            {connection.host ? ` (${connection.host})` : ""}
+                                            {formatAgentConnectionLabel(connection)}
                                           </SelectItem>
                                         ))
                                       )}
@@ -1452,11 +1565,16 @@ export function ComplexTaskDesigner() {
                           <WorkflowBlockInspector
                             value={selectedNode.data.config}
                             onChange={(next) => updateSelectedWorkflowNode(() => next)}
+                            availableModes={workflowModeOptions}
+                            modeHint={workflowModeHint}
+                            modeDisabled={!workflowModeSelectionSupported}
+                            modeLoading={loadingProfileModes}
                           />
                         ) : selectedNode && isOrchestrateNode(selectedNode) ? (
                           <OrchestrateStageInspector
                             value={selectedNode.data.config}
                             onChange={(next) => updateSelectedOrchestrateNode(() => next)}
+                            modeHint={tf("orchestrateActionProfileModeHint")}
                           />
                         ) : null}
                       </div>
@@ -1660,12 +1778,23 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
 function WorkflowBlockInspector({
   value,
   onChange,
+  availableModes = [],
+  modeHint,
+  modeDisabled = false,
+  modeLoading = false,
 }: {
   value: TxWorkflowBlockFormData;
   onChange: (next: TxWorkflowBlockFormData) => void;
+  availableModes?: string[];
+  modeHint?: string;
+  modeDisabled?: boolean;
+  modeLoading?: boolean;
 }) {
   const tf = useTranslations("taskForms");
-  const tc = useTranslations("common");
+  const selectableModes = [
+    AUTO_PROFILE_MODE,
+    ...availableModes.filter((mode) => mode !== AUTO_PROFILE_MODE),
+  ];
 
   const updateStep = (
     index: number,
@@ -1762,15 +1891,22 @@ function WorkflowBlockInspector({
                     wholeResourceMode: next as TxMode,
                   })
                 }
+                disabled={modeDisabled || modeLoading}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Enable">{tc("enableMode")}</SelectItem>
-                  <SelectItem value="Config">{tc("configMode")}</SelectItem>
+                  {selectableModes.map((mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {mode === AUTO_PROFILE_MODE ? tf("profileModeAuto") : mode}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {modeHint ? (
+                <p className="text-xs text-muted-foreground">{modeHint}</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>{tf("wholeResourceTimeout")}</Label>
@@ -1868,15 +2004,22 @@ function WorkflowBlockInspector({
                   onValueChange={(next) =>
                     updateStep(index, { mode: next as TxMode })
                   }
+                  disabled={modeDisabled || modeLoading}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Enable">{tc("enableMode")}</SelectItem>
-                    <SelectItem value="Config">{tc("configMode")}</SelectItem>
+                    {selectableModes.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {mode === AUTO_PROFILE_MODE ? tf("profileModeAuto") : mode}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {modeHint ? (
+                  <p className="text-xs text-muted-foreground">{modeHint}</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>{tf("stepTimeout")}</Label>
@@ -1935,9 +2078,11 @@ function WorkflowBlockInspector({
 function OrchestrateStageInspector({
   value,
   onChange,
+  modeHint,
 }: {
   value: OrchestrateStageFormData;
   onChange: (next: OrchestrateStageFormData) => void;
+  modeHint?: string;
 }) {
   const tf = useTranslations("taskForms");
 
@@ -2029,7 +2174,6 @@ function OrchestrateStageInspector({
                   : JSON.stringify(
                       {
                         name: "stage-change",
-                        mode: "Config",
                         commands: ["show version"],
                       },
                       null,
@@ -2057,6 +2201,9 @@ function OrchestrateStageInspector({
           placeholder={tf("actionJsonPlaceholder")}
         />
         <p className="text-xs text-muted-foreground">{tf("actionJsonHint")}</p>
+        {modeHint ? (
+          <p className="text-xs text-muted-foreground">{modeHint}</p>
+        ) : null}
       </div>
     </div>
   );

@@ -20,6 +20,34 @@ export interface Agent {
   updatedAt: Date;
 }
 
+export interface AgentLiveInfo {
+  name: string;
+  version?: string;
+  capabilities: string[];
+  uptimeSeconds: number;
+  connectionsCount: number;
+  templatesCount: number;
+  customProfilesCount: number;
+  managed: boolean;
+  transport: "http" | "grpc";
+}
+
+export interface DeviceProfileModes {
+  name: string;
+  default_mode: string;
+  modes: string[];
+}
+
+export interface AgentConnection {
+  name: string;
+  host?: string;
+  port?: number;
+  device_profile?: string;
+  has_password?: boolean;
+  default_mode?: string;
+  available_modes?: string[];
+}
+
 export interface AgentCreateInput {
   name: string;
   host: string;

@@ -1,5 +1,6 @@
 import { useTranslations } from "next-intl";
 import { CommandEchoTable } from "./command-echo-table";
+import { TxStepResults } from "./tx-step-results";
 import {
   KeyValueRow,
   MetaCard,
@@ -215,6 +216,8 @@ export function TxWorkflowResult({ result }: TxWorkflowResultProps) {
                   ))}
                 </div>
               )}
+
+              <TxStepResults stepResults={blockResult?.step_results} />
             </div>
           </SectionCard>
         );
@@ -245,6 +248,9 @@ export function TxWorkflowResult({ result }: TxWorkflowResultProps) {
                 <OutputBlock content={failureReason} maxHeight="160px" isError />
               </div>
             )}
+            <div className="mt-3">
+              <TxStepResults stepResults={blockResult.step_results} />
+            </div>
           </SectionCard>
         );
       })}

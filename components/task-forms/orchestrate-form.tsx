@@ -59,7 +59,6 @@ function defaultActionJson(kind: OrchestrationActionKind): string {
   return JSON.stringify(
     {
       name: "stage-change",
-      mode: "Config",
       commands: ["show version"],
     },
     null,

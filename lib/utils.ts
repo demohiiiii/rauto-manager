@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { AgentReportMode, Device } from "@/lib/types";
+import type { AgentConnection, AgentReportMode, Device } from "@/lib/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -14,6 +14,29 @@ export function normalizeAgentReportMode(
 
 export function formatAgentReportMode(mode?: string | null): "HTTP" | "gRPC" {
   return normalizeAgentReportMode(mode) === "grpc" ? "gRPC" : "HTTP";
+}
+
+export function formatAgentConnectionLabel(
+  connection: Pick<
+    AgentConnection,
+    "name" | "host" | "device_profile" | "default_mode"
+  >
+): string {
+  const host = connection.host?.trim();
+  const profile = connection.device_profile?.trim();
+  const defaultMode = connection.default_mode?.trim();
+  const summary =
+    profile && defaultMode
+      ? `${profile} / ${defaultMode}`
+      : profile || defaultMode || "";
+
+  return [
+    connection.name,
+    host ? `(${host})` : null,
+    summary ? `[${summary}]` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**

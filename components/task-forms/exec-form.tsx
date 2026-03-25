@@ -1,5 +1,6 @@
 "use client";
 
+import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,17 +14,31 @@ import { useTranslations } from "next-intl";
 
 export interface ExecFormData {
   command: string;
-  mode: "enable" | "config";
+  mode: string;
 }
 
 interface ExecFormProps {
   value: ExecFormData;
   onChange: (data: ExecFormData) => void;
+  availableModes?: string[];
+  modeHint?: string;
+  modeDisabled?: boolean;
+  modeLoading?: boolean;
 }
 
-export function ExecForm({ value, onChange }: ExecFormProps) {
+export function ExecForm({
+  value,
+  onChange,
+  availableModes = [],
+  modeHint,
+  modeDisabled = false,
+  modeLoading = false,
+}: ExecFormProps) {
   const t = useTranslations("taskForms");
-  const tc = useTranslations("common");
+  const selectableModes = [
+    AUTO_PROFILE_MODE,
+    ...availableModes.filter((mode) => mode !== AUTO_PROFILE_MODE),
+  ];
 
   return (
     <div className="space-y-4">
@@ -43,19 +58,26 @@ export function ExecForm({ value, onChange }: ExecFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="exec-mode">{tc("executionMode")}</Label>
+        <Label htmlFor="exec-mode">{t("profileMode")}</Label>
         <Select
           value={value.mode}
-          onValueChange={(v) => onChange({ ...value, mode: v as "enable" | "config" })}
+          onValueChange={(v) => onChange({ ...value, mode: v })}
+          disabled={modeDisabled || modeLoading}
         >
           <SelectTrigger id="exec-mode">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="enable">{tc("enableMode")}</SelectItem>
-            <SelectItem value="config">{tc("configMode")}</SelectItem>
+            {selectableModes.map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {mode === AUTO_PROFILE_MODE ? t("profileModeAuto") : mode}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
+        {modeHint ? (
+          <p className="text-xs text-muted-foreground">{modeHint}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -64,7 +86,7 @@ export function ExecForm({ value, onChange }: ExecFormProps) {
 export function buildExecPayload(data: ExecFormData): Record<string, unknown> {
   return {
     command: data.command,
-    mode: data.mode,
+    ...(data.mode !== AUTO_PROFILE_MODE ? { mode: data.mode } : {}),
   };
 }
 
@@ -75,5 +97,5 @@ export function validateExecForm(data: ExecFormData, t: (key: string) => string)
 
 export const defaultExecFormData: ExecFormData = {
   command: "",
-  mode: "enable",
+  mode: AUTO_PROFILE_MODE,
 };

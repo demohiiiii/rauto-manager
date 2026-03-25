@@ -6,6 +6,7 @@ import {
   dispatchToAgent,
   isAsyncDispatchType,
 } from "@/lib/dispatch";
+import { parseInvalidProfileModeError } from "@/lib/profile-mode";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
@@ -252,6 +253,18 @@ export async function POST(request: NextRequest) {
         dispatchError instanceof Error
           ? dispatchError.message
           : "Agent 调用失败";
+      const invalidProfileMode = parseInvalidProfileModeError(
+        dispatchErrorMessage
+      );
+      const normalizedDispatchErrorMessage = invalidProfileMode
+        ? t("dialogs.invalidProfileMode", {
+            mode: invalidProfileMode.requestedMode,
+            profile: invalidProfileMode.profile,
+            defaultMode: invalidProfileMode.defaultMode,
+            availableModes:
+              invalidProfileMode.availableModes.join(", ") || t("common.none"),
+          })
+        : dispatchErrorMessage;
 
       await prisma.$transaction([
         prisma.task.update({
@@ -261,7 +274,7 @@ export async function POST(request: NextRequest) {
             completedAt: new Date(),
             result: {
               success: false,
-              error: dispatchErrorMessage,
+              error: normalizedDispatchErrorMessage,
             },
           },
         }),
@@ -275,7 +288,7 @@ export async function POST(request: NextRequest) {
             stage: "manager",
             message: t("tasks.eventDispatchFailed", {
               name: agent.name,
-              error: dispatchErrorMessage,
+              error: normalizedDispatchErrorMessage,
             }),
             details: {
               dispatchType: body.type,
@@ -287,9 +300,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: dispatchErrorMessage,
+          error: normalizedDispatchErrorMessage,
         },
-        { status: 502 }
+        { status: invalidProfileMode ? 400 : 502 }
       );
     }
   } catch (error) {

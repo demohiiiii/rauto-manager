@@ -191,6 +191,9 @@ function ExecutionHistoryTable({
               {t("taskDetailHistoryStatus")}
             </th>
             <th className="text-left px-3 py-2 w-24">Mode</th>
+            <th className="text-left px-3 py-2 w-24">
+              {t("taskDetailHistoryExitCode")}
+            </th>
             <th className="text-right px-3 py-2 w-36">
               {t("taskDetailHistoryTime")}
             </th>
@@ -205,7 +208,7 @@ function ExecutionHistoryTable({
 
             return (
               <tr key={item.id} className="group">
-                <td colSpan={5} className="p-0">
+                <td colSpan={6} className="p-0">
                   <div
                     className={`
                       flex items-center transition-colors
@@ -261,6 +264,11 @@ function ExecutionHistoryTable({
                           {entry.event.mode}
                         </span>
                       )}
+                    </span>
+                    <span className="px-3 py-2 w-24 shrink-0 text-xs text-muted-foreground">
+                      {typeof entry.event.exit_code === "number"
+                        ? entry.event.exit_code
+                        : "—"}
                     </span>
                     <span className="px-3 py-2 w-36 text-right text-xs text-muted-foreground shrink-0">
                       {new Date(entry.ts_ms).toLocaleString()}

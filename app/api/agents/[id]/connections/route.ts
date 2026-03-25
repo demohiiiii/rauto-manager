@@ -2,12 +2,109 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   isGrpcMethodUnavailable,
   listConnectionsOverGrpc,
+  listProfileModesOverGrpc,
   upsertConnectionOverGrpc,
 } from "@/lib/agent-task-grpc";
+import { normalizeDeviceProfileModes } from "@/lib/profile-mode";
 import { prisma } from "@/lib/prisma";
+import type { AgentConnection, DeviceProfileModes } from "@/lib/types";
 import { isAgentAvailableStatus } from "@/lib/utils";
 
 const CONN_TIMEOUT_MS = 15000;
+
+async function enrichConnectionsWithProfileModes(
+  reportMode: "http" | "grpc",
+  host: string,
+  port: number,
+  connections: AgentConnection[],
+  agentToken: string
+): Promise<AgentConnection[]> {
+  const uniqueProfiles = Array.from(
+    new Set(
+      connections
+        .map((connection) => connection.device_profile?.trim())
+        .filter((profile): profile is string => Boolean(profile))
+    )
+  );
+
+  if (uniqueProfiles.length === 0) {
+    return connections;
+  }
+
+  const profileModesByName = new Map<
+    string,
+    { default_mode: string; modes: string[] }
+  >();
+
+  await Promise.all(
+    uniqueProfiles.map(async (profile) => {
+      try {
+        const normalized =
+          reportMode === "grpc"
+            ? normalizeDeviceProfileModes(
+                (await listProfileModesOverGrpc({
+                  agent: { host, port, reportMode: "grpc" },
+                  timeoutMs: CONN_TIMEOUT_MS,
+                  name: profile,
+                })) as unknown as DeviceProfileModes
+              )
+            : await (async () => {
+                const response = await fetch(
+                  `http://${host}:${port}/api/device-profiles/${encodeURIComponent(
+                    profile
+                  )}/modes`,
+                  {
+                    headers: {
+                      ...(agentToken && { Authorization: `Bearer ${agentToken}` }),
+                    },
+                    signal: AbortSignal.timeout(CONN_TIMEOUT_MS),
+                  }
+                );
+
+                if (!response.ok) {
+                  return null;
+                }
+
+                const text = await response.text().catch(() => "");
+                if (!text.trim()) {
+                  return null;
+                }
+
+                return normalizeDeviceProfileModes(JSON.parse(text));
+              })();
+
+        if (!normalized) {
+          return;
+        }
+
+        profileModesByName.set(profile, {
+          default_mode: normalized.default_mode,
+          modes: normalized.modes,
+        });
+      } catch {
+        // Ignore per-profile failures so a single bad profile does not break the list.
+      }
+    })
+  );
+
+  return connections.map((connection) => {
+    const profile = connection.device_profile?.trim();
+    const summary = profile ? profileModesByName.get(profile) : undefined;
+
+    if (!summary) {
+      return profile
+        ? { ...connection, device_profile: profile }
+        : connection;
+    }
+
+    return {
+      ...connection,
+      device_profile: profile,
+      default_mode: summary.default_mode,
+      available_modes: summary.modes,
+    };
+  });
+}
 
 /**
  * GET /api/agents/[id]/connections
@@ -46,13 +143,25 @@ export async function GET(
           timeoutMs: CONN_TIMEOUT_MS,
         });
 
+        const connections = Array.isArray(result.connections)
+          ? result.connections.map((connection) => ({
+              ...connection,
+              device_profile: connection.device_profile?.trim(),
+            }))
+          : [];
+        const enrichedConnections = await enrichConnectionsWithProfileModes(
+          "grpc",
+          agent.host,
+          agent.port,
+          connections,
+          ""
+        );
+
         return NextResponse.json(
           {
             success: true,
             data: {
-              connections: Array.isArray(result.connections)
-                ? result.connections
-                : [],
+              connections: enrichedConnections,
             },
           },
         );
@@ -96,10 +205,18 @@ export async function GET(
     }
 
     const data = await response.json();
+    const connections = Array.isArray(data) ? data : data.connections ?? [];
+    const enrichedConnections = await enrichConnectionsWithProfileModes(
+      "http",
+      agent.host,
+      agent.port,
+      connections,
+      agentToken
+    );
 
     return NextResponse.json({
       success: true,
-      data: { connections: Array.isArray(data) ? data : data.connections ?? [] },
+      data: { connections: enrichedConnections },
     });
   } catch (error) {
     return NextResponse.json(

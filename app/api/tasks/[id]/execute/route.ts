@@ -5,6 +5,7 @@ import {
   dispatchToAgent,
   isAsyncDispatchType,
 } from "@/lib/dispatch";
+import { parseInvalidProfileModeError } from "@/lib/profile-mode";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import type { DispatchType } from "@/lib/types";
@@ -226,6 +227,18 @@ export async function POST(
         dispatchError instanceof Error
           ? dispatchError.message
           : t("common.saveFailed");
+      const invalidProfileMode = parseInvalidProfileModeError(
+        dispatchErrorMessage
+      );
+      const normalizedDispatchErrorMessage = invalidProfileMode
+        ? t("dialogs.invalidProfileMode", {
+            mode: invalidProfileMode.requestedMode,
+            profile: invalidProfileMode.profile,
+            defaultMode: invalidProfileMode.defaultMode,
+            availableModes:
+              invalidProfileMode.availableModes.join(", ") || t("common.none"),
+          })
+        : dispatchErrorMessage;
       // If the agent call fails, mark the task as failed
       await prisma.$transaction([
         prisma.task.update({
@@ -235,7 +248,7 @@ export async function POST(
             completedAt: new Date(),
             result: {
               success: false,
-              error: dispatchErrorMessage,
+              error: normalizedDispatchErrorMessage,
             },
           },
         }),
@@ -249,7 +262,7 @@ export async function POST(
             stage: "manager",
             message: t("tasks.eventDispatchFailed", {
               name: agent.name,
-              error: dispatchErrorMessage,
+              error: normalizedDispatchErrorMessage,
             }),
             details: {
               dispatchType,
@@ -261,9 +274,9 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: dispatchErrorMessage,
+          error: normalizedDispatchErrorMessage,
         },
-        { status: 502 }
+        { status: invalidProfileMode ? 400 : 502 }
       );
     }
   } catch (error) {

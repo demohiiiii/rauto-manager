@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
-import type { Agent } from "@/lib/types";
+import type { Agent, AgentLiveInfo } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -112,10 +112,20 @@ export function AgentDetailDialog({
     queryFn: () => apiClient.getDevicesByAgent(agent!.id),
     enabled: open && Boolean(agent?.id),
   });
+  const { data: liveInfoResponse } = useQuery({
+    queryKey: ["agent-info", agent?.id, agent?.reportMode],
+    queryFn: () => apiClient.getAgentInfo(agent!.id),
+    enabled: open && Boolean(agent?.id),
+    retry: false,
+  });
 
   if (!agent) {
     return null;
   }
+
+  const liveInfo: AgentLiveInfo | undefined = liveInfoResponse?.success
+    ? liveInfoResponse.data
+    : undefined;
 
   const statusConfig = STATUS_CONFIG[agent.status] ?? STATUS_CONFIG.offline;
   const StatusIcon = statusConfig.icon;
@@ -126,6 +136,13 @@ export function AgentDetailDialog({
   const unreachableDevices = devices.filter(
     (device) => device.status === "unreachable"
   ).length;
+  const displayVersion = liveInfo?.version ?? agent.version;
+  const displayUptimeSeconds = liveInfo?.uptimeSeconds ?? Number(agent.uptimeSeconds);
+  const displayConnectionsCount =
+    liveInfo?.connectionsCount ?? agent.connectionsCount;
+  const displayTemplatesCount =
+    liveInfo?.templatesCount ?? agent.templatesCount;
+  const displayCapabilities = liveInfo?.capabilities ?? agent.capabilities;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -166,7 +183,7 @@ export function AgentDetailDialog({
               </Badge>
             </InfoRow>
             <InfoRow label={tc("version")}>
-              {agent.version ?? tc("notSet")}
+              {displayVersion ?? tc("notSet")}
             </InfoRow>
             <InfoRow label={td("agentDetailLastHeartbeat")}>
               {new Date(agent.lastHeartbeat).toLocaleString()}
@@ -174,8 +191,15 @@ export function AgentDetailDialog({
             <InfoRow label={td("agentDetailUptime")}>
               <span className="inline-flex items-center gap-1">
                 <Timer className="h-3 w-3" />
-                {formatUptime(agent.uptimeSeconds)}
+                {formatUptime(displayUptimeSeconds)}
               </span>
+            </InfoRow>
+            <InfoRow label={td("agentDetailManagedMode")}>
+              {liveInfo
+                ? liveInfo.managed
+                  ? td("agentDetailManagedModeYes")
+                  : td("agentDetailManagedModeNo")
+                : tc("notSet")}
             </InfoRow>
           </div>
 
@@ -205,7 +229,7 @@ export function AgentDetailDialog({
                   {td("agentDetailConnections")}
                 </div>
                 <div className="mt-1 text-2xl font-semibold">
-                  {agent.connectionsCount}
+                  {displayConnectionsCount}
                 </div>
               </div>
               <div className="rounded-lg border bg-muted/20 p-3">
@@ -213,7 +237,15 @@ export function AgentDetailDialog({
                   {td("agentDetailTemplates")}
                 </div>
                 <div className="mt-1 text-2xl font-semibold">
-                  {agent.templatesCount}
+                  {displayTemplatesCount}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="text-xs text-muted-foreground">
+                  {td("agentDetailCustomProfiles")}
+                </div>
+                <div className="mt-1 text-2xl font-semibold">
+                  {liveInfo?.customProfilesCount ?? tc("notSet")}
                 </div>
               </div>
             </div>
@@ -223,9 +255,9 @@ export function AgentDetailDialog({
 
           <div className="space-y-3">
             <h4 className="text-sm font-medium">{tc("capabilities")}</h4>
-            {agent.capabilities.length > 0 ? (
+            {displayCapabilities.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {agent.capabilities.map((capability) => (
+                {displayCapabilities.map((capability) => (
                   <Badge key={capability} variant="outline">
                     {capability}
                   </Badge>

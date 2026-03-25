@@ -1,5 +1,6 @@
 import { useTranslations } from "next-intl";
 import { CommandEchoTable } from "./command-echo-table";
+import { TxStepResults } from "./tx-step-results";
 import {
   KeyValueRow,
   MetaCard,
@@ -171,6 +172,8 @@ export function TxBlockResult({ result }: TxBlockResultProps) {
           </div>
         </SectionCard>
       )}
+
+      <TxStepResults stepResults={txResult?.step_results} />
 
       <SectionCard title={t("commandEchoes")}>
         <CommandEchoTable

@@ -1,6 +1,9 @@
 import axios, { AxiosInstance, isAxiosError } from "axios";
 import type {
   Agent,
+  AgentConnection,
+  AgentLiveInfo,
+  DeviceProfileModes,
   Device,
   Task,
   TaskDetail,
@@ -76,6 +79,11 @@ class ApiClient {
     }>
   > {
     const { data } = await this.client.get(`/agents/${id}/health`);
+    return data;
+  }
+
+  async getAgentInfo(id: string): Promise<ApiResponse<AgentLiveInfo>> {
+    const { data } = await this.client.get(`/agents/${id}/info`);
     return data;
   }
 
@@ -157,13 +165,23 @@ class ApiClient {
   }
 
   // Agent Connections & Templates
-  async getAgentConnections(agentId: string): Promise<ApiResponse<{ connections: Array<{ name: string; host?: string; port?: number; device_profile?: string; has_password?: boolean }> }>> {
+  async getAgentConnections(agentId: string): Promise<ApiResponse<{ connections: AgentConnection[] }>> {
     const { data } = await this.client.get(`/agents/${agentId}/connections`);
     return data;
   }
 
   async getAgentTemplates(agentId: string): Promise<ApiResponse<{ templates: Array<{ name: string; path: string }> }>> {
     const { data } = await this.client.get(`/agents/${agentId}/templates`);
+    return data;
+  }
+
+  async getAgentDeviceProfileModes(
+    agentId: string,
+    profile: string
+  ): Promise<ApiResponse<DeviceProfileModes>> {
+    const { data } = await this.client.get(
+      `/agents/${agentId}/device-profiles/${encodeURIComponent(profile)}/modes`
+    );
     return data;
   }
 }

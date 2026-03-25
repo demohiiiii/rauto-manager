@@ -1,5 +1,6 @@
 "use client";
 
+import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useTranslations } from "next-intl";
 
-type TxMode = "Enable" | "Config";
+type TxMode = string;
 type TxBlockRollbackMode = "infer" | "per_step" | "whole_resource";
 
 export interface TxBlockFormData {
@@ -34,6 +35,10 @@ export interface TxBlockFormData {
 interface TxBlockFormProps {
   value: TxBlockFormData;
   onChange: (data: TxBlockFormData) => void;
+  availableModes?: string[];
+  modeHint?: string;
+  modeDisabled?: boolean;
+  modeLoading?: boolean;
 }
 
 function parseCommandLines(text: string): string[] {
@@ -83,8 +88,19 @@ function parseOptionalNonNegativeInt(value: string): number | undefined {
   return parsed;
 }
 
-export function TxBlockForm({ value, onChange }: TxBlockFormProps) {
+export function TxBlockForm({
+  value,
+  onChange,
+  availableModes = [],
+  modeHint,
+  modeDisabled = false,
+  modeLoading = false,
+}: TxBlockFormProps) {
   const t = useTranslations("taskForms");
+  const selectableModes = [
+    AUTO_PROFILE_MODE,
+    ...availableModes.filter((mode) => mode !== AUTO_PROFILE_MODE),
+  ];
 
   return (
     <div className="space-y-4">
@@ -105,18 +121,23 @@ export function TxBlockForm({ value, onChange }: TxBlockFormProps) {
           <Label htmlFor="txblock-mode">{t("txBlockMode")}</Label>
           <Select
             value={value.mode}
-            onValueChange={(next) =>
-              onChange({ ...value, mode: next as TxMode })
-            }
+            onValueChange={(next) => onChange({ ...value, mode: next as TxMode })}
+            disabled={modeDisabled || modeLoading}
           >
             <SelectTrigger id="txblock-mode">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Config">{t("modeConfig")}</SelectItem>
-              <SelectItem value="Enable">{t("modeEnable")}</SelectItem>
+              {selectableModes.map((mode) => (
+                <SelectItem key={mode} value={mode}>
+                  {mode === AUTO_PROFILE_MODE ? t("profileModeAuto") : mode}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          {modeHint ? (
+            <p className="text-xs text-muted-foreground">{modeHint}</p>
+          ) : null}
         </div>
       </div>
 
@@ -295,7 +316,7 @@ export function TxBlockForm({ value, onChange }: TxBlockFormProps) {
 export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     name: data.name.trim(),
-    mode: data.mode,
+    ...(data.mode !== AUTO_PROFILE_MODE ? { mode: data.mode } : {}),
   };
 
   const template = data.template.trim();
@@ -413,7 +434,7 @@ export const defaultTxBlockFormData: TxBlockFormData = {
   varsJson: "",
   commandsText: "",
   rollbackCommandsText: "",
-  mode: "Config",
+  mode: AUTO_PROFILE_MODE,
   timeoutSecs: "",
   rollbackMode: "infer",
   rollbackOnFailure: false,

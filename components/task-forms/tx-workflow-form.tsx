@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import {
 import { Plus, Trash2, Code, FormInput } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-type TxMode = "Enable" | "Config";
+type TxMode = string;
 type WorkflowBlockKind = "config" | "show";
 type WorkflowRollbackPolicy = "per_step" | "none" | "whole_resource";
 
@@ -55,7 +56,7 @@ interface TxWorkflowFormProps {
 
 function defaultWorkflowStep(): TxWorkflowStepFormData {
   return {
-    mode: "Config",
+    mode: AUTO_PROFILE_MODE,
     command: "",
     timeoutSecs: "",
     rollbackCommand: "",
@@ -69,7 +70,7 @@ function defaultWorkflowBlock(): TxWorkflowBlockFormData {
     kind: "config",
     failFast: true,
     rollbackPolicy: "per_step",
-    wholeResourceMode: "Config",
+    wholeResourceMode: AUTO_PROFILE_MODE,
     wholeResourceUndoCommand: "",
     wholeResourceTimeoutSecs: "",
     wholeResourceTriggerStepIndex: "",
@@ -152,8 +153,7 @@ function parseWorkflowFromJson(rawJson: string): Partial<TxWorkflowFormData> | n
             : block.rollback_policy === "none"
               ? "none"
               : "per_step",
-          wholeResourceMode:
-            wholeResource?.mode === "Enable" ? "Enable" : "Config",
+          wholeResourceMode: wholeResource?.mode ?? AUTO_PROFILE_MODE,
           wholeResourceUndoCommand: wholeResource?.undo_command ?? "",
           wholeResourceTimeoutSecs:
             wholeResource?.timeout_secs !== undefined
@@ -165,7 +165,7 @@ function parseWorkflowFromJson(rawJson: string): Partial<TxWorkflowFormData> | n
               : "",
           steps: Array.isArray(block.steps) && block.steps.length > 0
             ? block.steps.map((step) => ({
-                mode: step.mode === "Enable" ? "Enable" : "Config",
+                mode: step.mode ?? AUTO_PROFILE_MODE,
                 command: step.command ?? "",
                 timeoutSecs:
                   step.timeout_secs !== undefined ? String(step.timeout_secs) : "",
@@ -636,10 +636,10 @@ function buildWorkflowJson(data: TxWorkflowFormData): Record<string, unknown> {
         fail_fast: block.failFast,
         steps: block.steps.map((step) => {
           const payload: Record<string, unknown> = {
-            mode: step.mode,
             command: step.command.trim(),
             rollback_command: step.rollbackCommand.trim() || null,
             rollback_on_failure: step.rollbackOnFailure,
+            ...(step.mode !== AUTO_PROFILE_MODE ? { mode: step.mode } : {}),
           };
 
           const timeoutSecs = parseOptionalPositiveInt(step.timeoutSecs);
@@ -653,8 +653,10 @@ function buildWorkflowJson(data: TxWorkflowFormData): Record<string, unknown> {
 
       if (block.rollbackPolicy === "whole_resource") {
         const wholeResource: Record<string, unknown> = {
-          mode: block.wholeResourceMode,
           undo_command: block.wholeResourceUndoCommand.trim(),
+          ...(block.wholeResourceMode !== AUTO_PROFILE_MODE
+            ? { mode: block.wholeResourceMode }
+            : {}),
         };
         const timeoutSecs = parseOptionalPositiveInt(block.wholeResourceTimeoutSecs);
         if (timeoutSecs !== undefined) {

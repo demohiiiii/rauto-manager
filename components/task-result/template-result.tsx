@@ -5,7 +5,9 @@ import {
   StatusBadge,
   OutputBlock,
   SectionCard,
+  KeyValueRow,
 } from "./shared";
+import { asNumber } from "./result-helpers";
 
 interface CommandResult {
   command?: string;
@@ -13,6 +15,7 @@ interface CommandResult {
   error?: string;
   success?: boolean;
   status?: string;
+  exit_code?: number;
 }
 
 interface TemplateResultData {
@@ -100,6 +103,13 @@ export function TemplateResult({ result }: TemplateResultProps) {
                   </div>
                   {r.output && (
                     <OutputBlock content={r.output} maxHeight="100px" />
+                  )}
+                  {asNumber(r.exit_code) !== undefined && (
+                    <KeyValueRow
+                      label={t("exitCode")}
+                      value={String(asNumber(r.exit_code))}
+                      mono
+                    />
                   )}
                   {r.error && (
                     <OutputBlock

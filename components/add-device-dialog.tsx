@@ -25,7 +25,9 @@ import {
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
+import { normalizeDeviceProfileModes } from "@/lib/profile-mode";
 import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
+import type { DeviceProfileModes } from "@/lib/types";
 
 interface AddDeviceDialogProps {
   children: React.ReactNode;
@@ -40,6 +42,9 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [deviceProfiles, setDeviceProfiles] = useState<string[]>([]);
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [loadingProfileModes, setLoadingProfileModes] = useState(false);
+  const [profileModesError, setProfileModesError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
@@ -63,11 +68,12 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
   const availableAgents = (agentsData?.data ?? []).filter((a) =>
     isAgentAvailableStatus(a.status)
   );
-
   // When an agent is selected, fetch its supported device profiles through the Manager proxy
   useEffect(() => {
     if (!formData.agentId) {
       setDeviceProfiles([]);
+      setProfileModes(null);
+      setProfileModesError(null);
       return;
     }
 
@@ -93,6 +99,74 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.agentId]);
 
+  useEffect(() => {
+    if (!formData.agentId || !formData.deviceProfile) {
+      setProfileModes(null);
+      setProfileModesError(null);
+      setLoadingProfileModes(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchProfileModes = async () => {
+      setLoadingProfileModes(true);
+      setProfileModesError(null);
+
+      try {
+        const result = await apiClient.getAgentDeviceProfileModes(
+          formData.agentId,
+          formData.deviceProfile
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (result.success && result.data) {
+          setProfileModes(normalizeDeviceProfileModes(result.data));
+        } else {
+          setProfileModes(null);
+          setProfileModesError(result.error ?? tc("unknownError"));
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setProfileModes(null);
+        setProfileModesError(
+          error instanceof Error ? error.message : tc("unknownError")
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingProfileModes(false);
+        }
+      }
+    };
+
+    fetchProfileModes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.agentId, formData.deviceProfile, tc]);
+
+  const profileModeHint = !formData.deviceProfile
+    ? t("deviceProfileHint")
+    : loadingProfileModes
+      ? t("profileModeLoading")
+      : profileModes
+        ? t("profileModeDefaultHint", {
+            profile: formData.deviceProfile,
+            defaultMode: profileModes.default_mode,
+          })
+        : profileModesError
+          ? t("profileModeUnavailableHint", {
+              profile: formData.deviceProfile,
+            })
+          : t("deviceProfileHint");
+
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setTestResult(null);
@@ -100,6 +174,8 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     // Clear the selected device profile when switching agents
     if (field === "agentId") {
       setFormData((prev) => ({ ...prev, deviceProfile: "" }));
+      setProfileModes(null);
+      setProfileModesError(null);
     }
   };
 
@@ -299,8 +375,15 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {t("deviceProfileHint")}
+              {profileModeHint}
             </p>
+            {profileModes?.modes?.length ? (
+              <p className="text-xs text-muted-foreground">
+                {t("profileModeAvailableModes", {
+                  modes: profileModes.modes.join(", "),
+                })}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

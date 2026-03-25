@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,13 +19,17 @@ import { useTranslations } from "next-intl";
 export interface TemplateFormData {
   template: string;
   variables: string;
-  mode: "enable" | "config";
+  mode: string;
 }
 
 interface TemplateFormProps {
   value: TemplateFormData;
   onChange: (data: TemplateFormData) => void;
   agentId: string;
+  availableModes?: string[];
+  modeHint?: string;
+  modeDisabled?: boolean;
+  modeLoading?: boolean;
 }
 
 interface TemplateItem {
@@ -32,11 +37,23 @@ interface TemplateItem {
   path: string;
 }
 
-export function TemplateForm({ value, onChange, agentId }: TemplateFormProps) {
+export function TemplateForm({
+  value,
+  onChange,
+  agentId,
+  availableModes = [],
+  modeHint,
+  modeDisabled = false,
+  modeLoading = false,
+}: TemplateFormProps) {
   const t = useTranslations("taskForms");
   const tc = useTranslations("common");
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const selectableModes = [
+    AUTO_PROFILE_MODE,
+    ...availableModes.filter((mode) => mode !== AUTO_PROFILE_MODE),
+  ];
 
   useEffect(() => {
     if (!agentId) {
@@ -116,19 +133,26 @@ export function TemplateForm({ value, onChange, agentId }: TemplateFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="template-mode">{tc("executionMode")}</Label>
+        <Label htmlFor="template-mode">{t("profileMode")}</Label>
         <Select
           value={value.mode}
-          onValueChange={(v) => onChange({ ...value, mode: v as "enable" | "config" })}
+          onValueChange={(v) => onChange({ ...value, mode: v })}
+          disabled={modeDisabled || modeLoading}
         >
           <SelectTrigger id="template-mode">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="enable">{tc("enableMode")}</SelectItem>
-            <SelectItem value="config">{tc("configMode")}</SelectItem>
+            {selectableModes.map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {mode === AUTO_PROFILE_MODE ? t("profileModeAuto") : mode}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
+        {modeHint ? (
+          <p className="text-xs text-muted-foreground">{modeHint}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -147,7 +171,7 @@ export function buildTemplatePayload(data: TemplateFormData): Record<string, unk
   return {
     template: data.template,
     vars: variables,
-    mode: data.mode,
+    ...(data.mode !== AUTO_PROFILE_MODE ? { mode: data.mode } : {}),
   };
 }
 
@@ -166,5 +190,5 @@ export function validateTemplateForm(data: TemplateFormData, t: (key: string) =>
 export const defaultTemplateFormData: TemplateFormData = {
   template: "",
   variables: "",
-  mode: "config",
+  mode: AUTO_PROFILE_MODE,
 };

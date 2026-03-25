@@ -10,6 +10,7 @@ interface RecordingEventPayload {
   command?: string;
   mode?: string;
   success?: boolean;
+  exit_code?: number;
   content?: string;
   all?: string;
 }
@@ -86,6 +87,9 @@ export function CommandEchoTable({
             <th className="text-left px-3 py-2 w-24">
               Mode
             </th>
+            <th className="text-left px-3 py-2 w-24">
+              {t("taskDetailHistoryExitCode")}
+            </th>
             <th className="text-right px-3 py-2 w-40">
               {t("taskDetailHistoryTime")}
             </th>
@@ -100,7 +104,7 @@ export function CommandEchoTable({
 
             return (
               <tr key={`${entry.ts_ms}-${index}`}>
-                <td colSpan={5} className="p-0">
+                <td colSpan={6} className="p-0">
                   <button
                     type="button"
                     className={`
@@ -163,6 +167,11 @@ export function CommandEchoTable({
                       ) : (
                         "—"
                       )}
+                    </span>
+                    <span className="px-3 py-2 w-24 shrink-0 text-xs text-muted-foreground">
+                      {typeof entry.event.exit_code === "number"
+                        ? entry.event.exit_code
+                        : "—"}
                     </span>
                     <span className="px-3 py-2 w-40 text-right text-xs text-muted-foreground shrink-0">
                       {new Date(entry.ts_ms).toLocaleString()}

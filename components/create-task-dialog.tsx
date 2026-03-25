@@ -25,9 +25,14 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
-import type { DispatchType } from "@/lib/types";
+import type { Agent, AgentConnection, DeviceProfileModes, DispatchType } from "@/lib/types";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
+import { AUTO_PROFILE_MODE, normalizeDeviceProfileModes } from "@/lib/profile-mode";
+import {
+  formatAgentConnectionLabel,
+  formatAgentReportMode,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 
 import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
 import { TemplateForm, buildTemplatePayload, validateTemplateForm, defaultTemplateFormData, type TemplateFormData } from "@/components/task-forms/template-form";
@@ -45,13 +50,11 @@ const DISPATCH_TYPE_CONFIG: {
   { type: "tx_block", labelKey: "txBlock", icon: Layers },
 ];
 
-interface ConnectionItem {
-  name: string;
-  host?: string;
-  port?: number;
-  device_profile?: string;
-  has_password?: boolean;
-}
+const PROFILE_MODE_SUPPORTED_TYPES: SimpleDispatchType[] = [
+  "exec",
+  "template",
+  "tx_block",
+];
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -75,9 +78,12 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const [execData, setExecData] = useState<ExecFormData>(defaultExecFormData);
   const [templateData, setTemplateData] = useState<TemplateFormData>(defaultTemplateFormData);
   const [txBlockData, setTxBlockData] = useState<TxBlockFormData>(defaultTxBlockFormData);
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [loadingProfileModes, setLoadingProfileModes] = useState(false);
+  const [profileModesError, setProfileModesError] = useState<string | null>(null);
 
   // Connection list
-  const [connections, setConnections] = useState<ConnectionItem[]>([]);
+  const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const defaultRecordLevel = getDefaultRecordLevelForType(dispatchType);
   const shouldHighlightRecording = defaultRecordLevel !== "Off";
@@ -93,6 +99,35 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const availableAgents = (agentsData?.data ?? []).filter(
     (a) => isAgentAvailableStatus(a.status)
   );
+  const allAgents = (agentsData?.data ?? []) as Agent[];
+  const selectedConnection = connections.find((conn) => conn.name === connectionName);
+  const selectedDeviceProfile = selectedConnection?.device_profile?.trim() || "";
+  const shouldResolveProfileModes =
+    PROFILE_MODE_SUPPORTED_TYPES.includes(dispatchType) &&
+    Boolean(agentId) &&
+    Boolean(selectedDeviceProfile);
+  const modeSelectionSupported =
+    shouldResolveProfileModes &&
+    !loadingProfileModes &&
+    Array.isArray(profileModes?.modes) &&
+    profileModes.modes.length > 0;
+  const modeOptions = modeSelectionSupported ? profileModes?.modes ?? [] : [];
+  const modeHint = !connectionName
+    ? tf("profileModeSelectConnectionHint")
+    : !selectedDeviceProfile
+      ? tf("profileModeNoProfileHint")
+      : loadingProfileModes
+        ? tf("profileModeLoading")
+        : profileModes
+          ? tf("profileModeDefaultHint", {
+              profile: selectedDeviceProfile,
+              defaultMode: profileModes.default_mode,
+            })
+          : profileModesError
+            ? tf("profileModeUnavailableHint", {
+                profile: selectedDeviceProfile,
+              })
+            : tf("profileModeAutoHint");
 
   // Reload connections whenever the selected agent changes
   useEffect(() => {
@@ -120,6 +155,82 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     fetchConnections();
   }, [agentId]);
 
+  useEffect(() => {
+    if (!shouldResolveProfileModes) {
+      setProfileModes(null);
+      setProfileModesError(null);
+      setLoadingProfileModes(false);
+      return;
+    }
+
+    if (
+      selectedConnection?.default_mode &&
+      Array.isArray(selectedConnection.available_modes)
+    ) {
+      setProfileModes(
+        normalizeDeviceProfileModes({
+          name: selectedDeviceProfile,
+          default_mode: selectedConnection.default_mode,
+          modes: selectedConnection.available_modes,
+        })
+      );
+      setProfileModesError(null);
+      setLoadingProfileModes(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchProfileModes = async () => {
+      setLoadingProfileModes(true);
+      setProfileModesError(null);
+
+      try {
+        const result = await apiClient.getAgentDeviceProfileModes(
+          agentId,
+          selectedDeviceProfile
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (result.success && result.data) {
+          setProfileModes(normalizeDeviceProfileModes(result.data));
+        } else {
+          setProfileModes(null);
+          setProfileModesError(result.error ?? tc("unknownError"));
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setProfileModes(null);
+        setProfileModesError(
+          error instanceof Error ? error.message : tc("unknownError")
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingProfileModes(false);
+        }
+      }
+    };
+
+    fetchProfileModes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agentId,
+    selectedConnection?.available_modes,
+    selectedConnection?.default_mode,
+    selectedDeviceProfile,
+    shouldResolveProfileModes,
+    tc,
+  ]);
+
   // Reset the form
   const resetForm = () => {
     setAgentId("");
@@ -130,6 +241,9 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     setExecData(defaultExecFormData);
     setTemplateData(defaultTemplateFormData);
     setTxBlockData(defaultTxBlockFormData);
+    setProfileModes(null);
+    setLoadingProfileModes(false);
+    setProfileModesError(null);
   };
 
   // Validate the form
@@ -226,7 +340,18 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             <Label>
               {t("targetAgent")} <span className="text-destructive">*</span>
             </Label>
-            <Select value={agentId} onValueChange={(v) => { setAgentId(v); setConnectionName(""); }}>
+            <Select
+              value={agentId}
+              onValueChange={(v) => {
+                setAgentId(v);
+                setConnectionName("");
+                setProfileModes(null);
+                setProfileModesError(null);
+                setExecData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                setTemplateData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                setTxBlockData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t("selectOnlineAgent")} />
               </SelectTrigger>
@@ -283,7 +408,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             ) : (
               <Select
                 value={connectionName}
-                onValueChange={setConnectionName}
+                onValueChange={(value) => {
+                  setConnectionName(value);
+                  setProfileModes(null);
+                  setProfileModesError(null);
+                  setExecData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                  setTemplateData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                  setTxBlockData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                }}
                 disabled={!agentId}
               >
                 <SelectTrigger>
@@ -297,9 +429,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                   ) : (
                     connections.map((conn) => (
                       <SelectItem key={conn.name} value={conn.name}>
-                        {conn.name}
-                        {conn.host ? ` (${conn.host})` : ""}
-                        {conn.device_profile ? ` [${conn.device_profile}]` : ""}
+                        {formatAgentConnectionLabel(conn)}
                       </SelectItem>
                     ))
                   )}
@@ -357,17 +487,35 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
           {/* Type-specific form */}
           <div className="border-t pt-4">
             {dispatchType === "exec" && (
-              <ExecForm value={execData} onChange={setExecData} />
+              <ExecForm
+                value={execData}
+                onChange={setExecData}
+                availableModes={modeOptions}
+                modeHint={modeHint}
+                modeDisabled={!modeSelectionSupported}
+                modeLoading={loadingProfileModes}
+              />
             )}
             {dispatchType === "template" && (
               <TemplateForm
                 value={templateData}
                 onChange={setTemplateData}
                 agentId={agentId}
+                availableModes={modeOptions}
+                modeHint={modeHint}
+                modeDisabled={!modeSelectionSupported}
+                modeLoading={loadingProfileModes}
               />
             )}
             {dispatchType === "tx_block" && (
-              <TxBlockForm value={txBlockData} onChange={setTxBlockData} />
+              <TxBlockForm
+                value={txBlockData}
+                onChange={setTxBlockData}
+                availableModes={modeOptions}
+                modeHint={modeHint}
+                modeDisabled={!modeSelectionSupported}
+                modeLoading={loadingProfileModes}
+              />
             )}
           </div>
         </div>
