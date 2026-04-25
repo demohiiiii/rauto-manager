@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import {
-  dispatchToAgent,
-  isAsyncDispatchType,
-} from "@/lib/dispatch";
+import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
 import { parseInvalidProfileModeError } from "@/lib/profile-mode";
-import { getDefaultRecordLevelForType } from "@/lib/record-level";
+import {
+  getDefaultRecordLevelForType,
+  normalizeRecordLevel,
+} from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import type { DispatchType } from "@/lib/types";
 import type { Prisma } from "@prisma/client";
@@ -22,7 +22,7 @@ import { isAgentAvailableStatus } from "@/lib/utils";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -33,7 +33,7 @@ export async function POST(
     if (!task) {
       return NextResponse.json(
         { success: false, error: t("notifications.agentNotFound") },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -43,14 +43,14 @@ export async function POST(
           success: false,
           error: t("common.missingRequiredFields"),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!task.agentIds.length) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -62,7 +62,7 @@ export async function POST(
     if (!agent) {
       return NextResponse.json(
         { success: false, error: t("notifications.agentNotFound") },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -72,12 +72,13 @@ export async function POST(
           success: false,
           error: t("common.missingRequiredFields"),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const dispatchType = task.dispatchType as DispatchType;
     const asyncDispatch = isAsyncDispatchType(dispatchType);
+    const dispatchingEventCreatedAt = new Date();
 
     // Record that manager has started the dispatch flow.
     await prisma.$transaction(async (tx) => {
@@ -101,6 +102,7 @@ export async function POST(
           stage: "manager",
           message: t("tasks.eventDispatching", { name: agent.name }),
           progress: 0,
+          createdAt: dispatchingEventCreatedAt,
           details: {
             dispatchType,
           },
@@ -111,7 +113,7 @@ export async function POST(
     // Build the callback URL from the current request origin
     const callbackUrl = new URL(
       "/api/agents/report-task-callback",
-      request.nextUrl.origin
+      request.nextUrl.origin,
     ).toString();
 
     const payload = (task.payload ?? {}) as Record<string, unknown>;
@@ -122,11 +124,16 @@ export async function POST(
       | undefined;
     const dryRun = payload.dry_run as boolean | undefined;
     const recordLevel =
-      (payload.record_level as string | undefined) ??
+      normalizeRecordLevel(payload.record_level) ??
       getDefaultRecordLevelForType(dispatchType);
 
     // Build a clean payload without the meta field
-    const { connection: _conn, dry_run: _dry, record_level: _rec, ...purePayload } = payload;
+    const purePayload = Object.fromEntries(
+      Object.entries(payload).filter(
+        ([key]) =>
+          key !== "connection" && key !== "dry_run" && key !== "record_level",
+      ),
+    );
 
     try {
       const dispatchResult = await dispatchToAgent({
@@ -144,7 +151,11 @@ export async function POST(
         recordLevel: recordLevel,
       });
 
-      const taskStatus = dispatchResult.executionMode === "async" ? "queued" : "running";
+      const taskStatus =
+        dispatchResult.executionMode === "async" ? "queued" : "running";
+      const acceptedEventCreatedAt = new Date(
+        dispatchingEventCreatedAt.getTime() + 1,
+      );
 
       await prisma.$transaction(async (tx) => {
         if (dispatchResult.executionMode === "async") {
@@ -164,14 +175,18 @@ export async function POST(
             taskId: task.id,
             agentId: agent.id,
             agentName: agent.name,
-            eventType: dispatchResult.executionMode === "async" ? "queued" : "dispatched",
+            eventType:
+              dispatchResult.executionMode === "async"
+                ? "queued"
+                : "dispatched",
             level: "info",
             stage: "manager",
             message:
               dispatchResult.executionMode === "async"
                 ? t("tasks.eventAccepted", { name: agent.name })
                 : t("tasks.eventDispatched", { name: agent.name }),
-            progress: dispatchResult.executionMode === "async" ? 5 : 10,
+            progress: dispatchResult.executionMode === "async" ? 0 : 10,
+            createdAt: acceptedEventCreatedAt,
             details: {
               dispatchType,
               executionMode: dispatchResult.executionMode,
@@ -187,7 +202,7 @@ export async function POST(
         title: t("notifications.taskDispatched"),
         message: t("notifications.taskDispatchedTo", {
           name: agent.name,
-          type: t(`tasks.dispatchType.${dispatchType}`)
+          type: t(`tasks.dispatchType.${dispatchType}`),
         }),
         level: "info",
         metadata: {
@@ -227,9 +242,8 @@ export async function POST(
         dispatchError instanceof Error
           ? dispatchError.message
           : t("common.saveFailed");
-      const invalidProfileMode = parseInvalidProfileModeError(
-        dispatchErrorMessage
-      );
+      const invalidProfileMode =
+        parseInvalidProfileModeError(dispatchErrorMessage);
       const normalizedDispatchErrorMessage = invalidProfileMode
         ? t("dialogs.invalidProfileMode", {
             mode: invalidProfileMode.requestedMode,
@@ -276,7 +290,7 @@ export async function POST(
           success: false,
           error: normalizedDispatchErrorMessage,
         },
-        { status: invalidProfileMode ? 400 : 502 }
+        { status: invalidProfileMode ? 400 : 502 },
       );
     }
   } catch (error) {

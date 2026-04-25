@@ -25,20 +25,49 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
-import type { Agent, AgentConnection, DeviceProfileModes, DispatchType } from "@/lib/types";
+import type {
+  AgentConnection,
+  DeviceProfileModes,
+  DispatchType,
+  RecordLevel,
+} from "@/lib/types";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { AUTO_PROFILE_MODE, normalizeDeviceProfileModes } from "@/lib/profile-mode";
+import {
+  AUTO_PROFILE_MODE,
+  normalizeDeviceProfileModes,
+} from "@/lib/profile-mode";
 import {
   formatAgentConnectionLabel,
   formatAgentReportMode,
   isAgentAvailableStatus,
 } from "@/lib/utils";
 
-import { ExecForm, buildExecPayload, validateExecForm, defaultExecFormData, type ExecFormData } from "@/components/task-forms/exec-form";
-import { TemplateForm, buildTemplatePayload, validateTemplateForm, defaultTemplateFormData, type TemplateFormData } from "@/components/task-forms/template-form";
-import { TxBlockForm, buildTxBlockPayload, validateTxBlockForm, defaultTxBlockFormData, type TxBlockFormData } from "@/components/task-forms/tx-block-form";
+import {
+  ExecForm,
+  buildExecPayload,
+  validateExecForm,
+  defaultExecFormData,
+  type ExecFormData,
+} from "@/components/task-forms/exec-form";
+import {
+  TemplateForm,
+  buildTemplatePayload,
+  validateTemplateForm,
+  defaultTemplateFormData,
+  type TemplateFormData,
+} from "@/components/task-forms/template-form";
+import {
+  TxBlockForm,
+  buildTxBlockPayload,
+  validateTxBlockForm,
+  defaultTxBlockFormData,
+  type TxBlockFormData,
+} from "@/components/task-forms/tx-block-form";
 
-type SimpleDispatchType = Extract<DispatchType, "exec" | "template" | "tx_block">;
+type SimpleDispatchType = Extract<
+  DispatchType,
+  "exec" | "template" | "tx_block"
+>;
 
 const DISPATCH_TYPE_CONFIG: {
   type: SimpleDispatchType;
@@ -61,7 +90,10 @@ interface CreateTaskDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
+export function CreateTaskDialog({
+  open,
+  onOpenChange,
+}: CreateTaskDialogProps) {
   const t = useTranslations("dialogs");
   const tc = useTranslations("common");
   const tf = useTranslations("taskForms");
@@ -70,23 +102,29 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   const [dispatchType, setDispatchType] = useState<SimpleDispatchType>("exec");
   const [connectionName, setConnectionName] = useState("");
   const [dryRun, setDryRun] = useState(false);
-  const [recordLevel, setRecordLevel] = useState<"Off" | "KeyEventsOnly" | "Full">(
-    getDefaultRecordLevelForType("exec")
+  const [recordLevel, setRecordLevel] = useState<RecordLevel>(
+    getDefaultRecordLevelForType("exec"),
   );
 
   // Form state
   const [execData, setExecData] = useState<ExecFormData>(defaultExecFormData);
-  const [templateData, setTemplateData] = useState<TemplateFormData>(defaultTemplateFormData);
-  const [txBlockData, setTxBlockData] = useState<TxBlockFormData>(defaultTxBlockFormData);
-  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [templateData, setTemplateData] = useState<TemplateFormData>(
+    defaultTemplateFormData,
+  );
+  const [txBlockData, setTxBlockData] = useState<TxBlockFormData>(
+    defaultTxBlockFormData,
+  );
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(
+    null,
+  );
   const [loadingProfileModes, setLoadingProfileModes] = useState(false);
-  const [profileModesError, setProfileModesError] = useState<string | null>(null);
+  const [profileModesError, setProfileModesError] = useState<string | null>(
+    null,
+  );
 
   // Connection list
   const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
-  const defaultRecordLevel = getDefaultRecordLevelForType(dispatchType);
-  const shouldHighlightRecording = defaultRecordLevel !== "Off";
 
   const queryClient = useQueryClient();
 
@@ -96,12 +134,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     queryFn: () => apiClient.getAgents(),
   });
 
-  const availableAgents = (agentsData?.data ?? []).filter(
-    (a) => isAgentAvailableStatus(a.status)
+  const availableAgents = (agentsData?.data ?? []).filter((a) =>
+    isAgentAvailableStatus(a.status),
   );
-  const allAgents = (agentsData?.data ?? []) as Agent[];
-  const selectedConnection = connections.find((conn) => conn.name === connectionName);
-  const selectedDeviceProfile = selectedConnection?.device_profile?.trim() || "";
+  const selectedConnection = connections.find(
+    (conn) => conn.name === connectionName,
+  );
+  const selectedDeviceProfile =
+    selectedConnection?.device_profile?.trim() || "";
   const shouldResolveProfileModes =
     PROFILE_MODE_SUPPORTED_TYPES.includes(dispatchType) &&
     Boolean(agentId) &&
@@ -111,7 +151,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     !loadingProfileModes &&
     Array.isArray(profileModes?.modes) &&
     profileModes.modes.length > 0;
-  const modeOptions = modeSelectionSupported ? profileModes?.modes ?? [] : [];
+  const modeOptions = modeSelectionSupported ? (profileModes?.modes ?? []) : [];
   const modeHint = !connectionName
     ? tf("profileModeSelectConnectionHint")
     : !selectedDeviceProfile
@@ -129,7 +169,6 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
               })
             : tf("profileModeAutoHint");
 
-  // Reload connections whenever the selected agent changes
   useEffect(() => {
     if (!agentId) {
       setConnections([]);
@@ -143,17 +182,25 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         if (result.success && result.data?.connections) {
           setConnections(result.data.connections);
         } else if (!result.success) {
-          toast.error(t("fetchConnectionsFailed", { error: result.error || tc("unknownError") }));
+          toast.error(
+            t("fetchConnectionsFailed", {
+              error: result.error || tc("unknownError"),
+            }),
+          );
         }
       } catch (error) {
-        toast.error(t("fetchConnectionsFailed", { error: error instanceof Error ? error.message : tc("unknownError") }));
+        toast.error(
+          t("fetchConnectionsFailed", {
+            error: error instanceof Error ? error.message : tc("unknownError"),
+          }),
+        );
       } finally {
         setLoadingConnections(false);
       }
     };
 
     fetchConnections();
-  }, [agentId]);
+  }, [agentId, t, tc]);
 
   useEffect(() => {
     if (!shouldResolveProfileModes) {
@@ -172,7 +219,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
           name: selectedDeviceProfile,
           default_mode: selectedConnection.default_mode,
           modes: selectedConnection.available_modes,
-        })
+        }),
       );
       setProfileModesError(null);
       setLoadingProfileModes(false);
@@ -188,7 +235,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       try {
         const result = await apiClient.getAgentDeviceProfileModes(
           agentId,
-          selectedDeviceProfile
+          selectedDeviceProfile,
         );
 
         if (cancelled) {
@@ -208,7 +255,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
 
         setProfileModes(null);
         setProfileModesError(
-          error instanceof Error ? error.message : tc("unknownError")
+          error instanceof Error ? error.message : tc("unknownError"),
         );
       } finally {
         if (!cancelled) {
@@ -301,20 +348,26 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         connection,
         payload,
         dry_run: dryRun || undefined,
-        record_level: recordLevel !== "Off" ? recordLevel : undefined,
+        record_level: recordLevel,
       });
 
       if (result.success) {
-        toast.success(t("taskDispatchedSuccess", { name: result.data?.agent_name ?? "" }));
+        toast.success(
+          t("taskDispatchedSuccess", { name: result.data?.agent_name ?? "" }),
+        );
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
         onOpenChange(false);
         resetForm();
       } else {
-        toast.error(t("dispatchFailed", { error: result.error ?? tc("unknownError") }));
+        toast.error(
+          t("dispatchFailed", { error: result.error ?? tc("unknownError") }),
+        );
       }
     } catch (error) {
       toast.error(
-        t("dispatchFailed", { error: error instanceof Error ? error.message : tc("unknownError") })
+        t("dispatchFailed", {
+          error: error instanceof Error ? error.message : tc("unknownError"),
+        }),
       );
     } finally {
       setSubmitting(false);
@@ -322,16 +375,20 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) resetForm();
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
             {t("createTaskTitle")}
           </DialogTitle>
-          <DialogDescription>
-            {t("createTaskDescription")}
-          </DialogDescription>
+          <DialogDescription>{t("createTaskDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-4">
@@ -348,8 +405,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 setProfileModes(null);
                 setProfileModesError(null);
                 setExecData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
-                setTemplateData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
-                setTxBlockData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                setTemplateData((prev) => ({
+                  ...prev,
+                  mode: AUTO_PROFILE_MODE,
+                }));
+                setTxBlockData((prev) => ({
+                  ...prev,
+                  mode: AUTO_PROFILE_MODE,
+                }));
               }}
             >
               <SelectTrigger>
@@ -357,11 +420,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
               </SelectTrigger>
               <SelectContent>
                 {availableAgents.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground">{t("noOnlineAgents")}</div>
+                  <div className="p-2 text-sm text-muted-foreground">
+                    {t("noOnlineAgents")}
+                  </div>
                 ) : (
                   availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
+                      {agent.name} · {formatAgentReportMode(agent.reportMode)} ·{" "}
+                      {agent.host}:{agent.port}
                     </SelectItem>
                   ))
                 )}
@@ -381,11 +447,12 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                   size="sm"
                   className="flex flex-col items-center gap-1 h-auto py-2"
                   onClick={() => {
-                    const currentDefault = getDefaultRecordLevelForType(dispatchType);
+                    const currentDefault =
+                      getDefaultRecordLevelForType(dispatchType);
                     const nextDefault = getDefaultRecordLevelForType(type);
                     setDispatchType(type);
                     setRecordLevel((prev) =>
-                      prev === currentDefault ? nextDefault : prev
+                      prev === currentDefault ? nextDefault : prev,
                     );
                   }}
                 >
@@ -398,7 +465,8 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
 
           <div className="space-y-2">
             <Label>
-              {t("deviceConnection")} <span className="text-destructive">*</span>
+              {t("deviceConnection")}{" "}
+              <span className="text-destructive">*</span>
             </Label>
             {loadingConnections ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
@@ -413,18 +481,32 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                   setProfileModes(null);
                   setProfileModesError(null);
                   setExecData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
-                  setTemplateData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
-                  setTxBlockData((prev) => ({ ...prev, mode: AUTO_PROFILE_MODE }));
+                  setTemplateData((prev) => ({
+                    ...prev,
+                    mode: AUTO_PROFILE_MODE,
+                  }));
+                  setTxBlockData((prev) => ({
+                    ...prev,
+                    mode: AUTO_PROFILE_MODE,
+                  }));
                 }}
                 disabled={!agentId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={agentId ? t("selectDeviceConnection") : t("selectAgentFirst")} />
+                  <SelectValue
+                    placeholder={
+                      agentId
+                        ? t("selectDeviceConnection")
+                        : t("selectAgentFirst")
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {connections.length === 0 ? (
                     <div className="p-2 text-sm text-muted-foreground">
-                      {agentId ? t("noAvailableConnections") : t("selectAgentFirst")}
+                      {agentId
+                        ? t("noAvailableConnections")
+                        : t("selectAgentFirst")}
                     </div>
                   ) : (
                     connections.map((conn) => (
@@ -455,31 +537,28 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <Label className="text-sm">{t("recordLevelLabel")}</Label>
-                {shouldHighlightRecording && (
-                  <Badge variant="secondary" className="h-5 px-2 text-[10px]">
-                    {t("recordLevelRecommended")}
-                  </Badge>
-                )}
+                <Badge variant="secondary" className="h-5 px-2 text-[10px]">
+                  {t("recordLevelRecommended")}
+                </Badge>
               </div>
               <div className="flex items-center gap-2">
                 <Select
                   value={recordLevel}
-                  onValueChange={(v) => setRecordLevel(v as "Off" | "KeyEventsOnly" | "Full")}
+                  onValueChange={(v) => setRecordLevel(v as RecordLevel)}
                 >
                   <SelectTrigger className="w-[170px] h-8">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Off">{t("recordLevelOff")}</SelectItem>
-                    <SelectItem value="KeyEventsOnly">{t("recordLevelKeyEvents")}</SelectItem>
+                    <SelectItem value="KeyEventsOnly">
+                      {t("recordLevelKeyEvents")}
+                    </SelectItem>
                     <SelectItem value="Full">{t("recordLevelFull")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <p className="max-w-md text-xs text-muted-foreground">
-                {shouldHighlightRecording
-                  ? t("recordLevelTxDescription")
-                  : t("recordLevelBasicDescription")}
+                {t("recordLevelDescription")}
               </p>
             </div>
           </div>
@@ -523,7 +602,10 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => { onOpenChange(false); resetForm(); }}
+            onClick={() => {
+              onOpenChange(false);
+              resetForm();
+            }}
             disabled={submitting}
           >
             {tc("cancel")}

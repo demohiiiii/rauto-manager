@@ -1,10 +1,21 @@
 import { dispatchTaskOverGrpc } from "@/lib/agent-task-grpc";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
-import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import type { AgentReportMode, DispatchType } from "@/lib/types";
+import {
+  getDefaultRecordLevelForType,
+  normalizeRecordLevel,
+} from "@/lib/record-level";
+import { buildTxBlockJsonFromPayload } from "@/lib/tx-block-serialize";
+import type { AgentReportMode, DispatchType, RecordLevel } from "@/lib/types";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
+  "exec",
+  "template",
+  "tx_block",
+  "tx_workflow",
+  "orchestrate",
+]);
+const GRPC_ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
   "tx_block",
   "tx_workflow",
   "orchestrate",
@@ -12,8 +23,8 @@ const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
 
 // Map dispatch types to rauto Agent HTTP API endpoints
 const HTTP_DISPATCH_ENDPOINT_MAP: Record<DispatchType, string> = {
-  exec: "/api/exec",
-  template: "/api/template/execute",
+  exec: "/api/exec/async",
+  template: "/api/template/execute/async",
   tx_block: "/api/tx/block/async",
   tx_workflow: "/api/tx/workflow/async",
   orchestrate: "/api/orchestrate/async",
@@ -34,7 +45,7 @@ interface AgentInfo {
   reportMode?: AgentReportMode;
 }
 
-interface DispatchOptions {
+interface AgentDispatchOptions {
   agent: AgentInfo;
   type: DispatchType;
   taskId: string;
@@ -42,7 +53,7 @@ interface DispatchOptions {
   connection?: Record<string, unknown>;
   payload: Record<string, unknown>;
   dryRun?: boolean;
-  recordLevel?: string;
+  recordLevel?: RecordLevel;
 }
 
 export type AgentDispatchExecutionMode = "sync" | "async";
@@ -54,8 +65,7 @@ export interface AgentDispatchResult {
 }
 
 // RecordLevel uses PascalCase in Manager and kebab-case in rauto Agent
-const RECORD_LEVEL_MAP: Record<string, string> = {
-  Off: "off",
+const RECORD_LEVEL_MAP: Record<RecordLevel, string> = {
   KeyEventsOnly: "key-events-only",
   Full: "full",
 };
@@ -64,12 +74,22 @@ const RECORD_LEVEL_MAP: Record<string, string> = {
  * Build the full request payload sent to the agent.
  * Convert the Manager dispatch request into the format accepted by rauto Agent.
  */
-function buildHttpAgentPayload(options: DispatchOptions): Record<string, unknown> {
-  const { type, taskId, callbackUrl, connection, payload, dryRun, recordLevel } = options;
-  const effectiveRecordLevel = recordLevel ?? getDefaultRecordLevelForType(type);
+function buildHttpAgentPayload(
+  options: AgentDispatchOptions,
+): Record<string, unknown> {
+  const {
+    type,
+    taskId,
+    callbackUrl,
+    connection,
+    payload,
+    dryRun,
+    recordLevel,
+  } = options;
+  const effectiveRecordLevel =
+    normalizeRecordLevel(recordLevel) ?? getDefaultRecordLevelForType(type);
 
   const base: Record<string, unknown> = {
-    ...payload,
     task_id: taskId,
     callback_url: callbackUrl,
   };
@@ -84,13 +104,53 @@ function buildHttpAgentPayload(options: DispatchOptions): Record<string, unknown
     base.dry_run = dryRun;
   }
 
-  // Inject record_level after converting it to kebab-case
-  if (effectiveRecordLevel && effectiveRecordLevel !== "Off") {
-    base.record_level =
-      RECORD_LEVEL_MAP[effectiveRecordLevel] ?? effectiveRecordLevel;
-  }
+  base.record_level = RECORD_LEVEL_MAP[effectiveRecordLevel];
 
-  return base;
+  switch (type) {
+    case "tx_block": {
+      const txBlockJson = buildTxBlockJsonFromPayload(payload);
+      const hasCommands =
+        Array.isArray(payload.commands) && payload.commands.length > 0;
+      const request: Record<string, unknown> = {
+        ...base,
+        tx_block: JSON.parse(txBlockJson) as unknown,
+      };
+
+      if (
+        !hasCommands &&
+        typeof payload.template === "string" &&
+        payload.template.trim()
+      ) {
+        request.tx_block_template_name = payload.template.trim();
+      }
+
+      if (isRecord(payload.vars)) {
+        request.tx_block_template_vars = payload.vars;
+      } else {
+        request.tx_block_template_vars = {};
+      }
+
+      return request;
+    }
+    case "tx_workflow":
+      return {
+        ...base,
+        workflow: payload.workflow ?? null,
+      };
+    case "orchestrate":
+      return {
+        ...base,
+        plan: payload.plan ?? null,
+        ...(typeof payload.base_dir === "string" && payload.base_dir.trim()
+          ? { base_dir: payload.base_dir.trim() }
+          : {}),
+      };
+    default:
+      return {
+        ...base,
+        ...payload,
+      };
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -98,7 +158,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function readAgentResponseBody(
-  response: Response
+  response: Response,
 ): Promise<Record<string, unknown>> {
   const text = await response.text().catch(() => "");
 
@@ -123,17 +183,15 @@ export function isAsyncDispatchType(type: DispatchType): boolean {
  * Return the agent response on success or throw on failure.
  */
 export async function dispatchToAgent(
-  options: DispatchOptions
+  options: AgentDispatchOptions,
 ): Promise<AgentDispatchResult> {
   const { agent, type } = options;
 
   const timeoutMs = DISPATCH_TIMEOUT_MAP[type];
-  const executionMode: AgentDispatchExecutionMode = isAsyncDispatchType(type)
-    ? "async"
-    : "sync";
+  const executionMode: AgentDispatchExecutionMode = "async";
   const reportMode = agent.reportMode ?? "http";
 
-  if (reportMode === "grpc") {
+  if (reportMode === "grpc" && GRPC_ASYNC_DISPATCH_TYPES.has(type)) {
     const response = await dispatchTaskOverGrpc({
       ...options,
       timeoutMs,
@@ -141,7 +199,7 @@ export async function dispatchToAgent(
 
     return {
       response,
-      statusCode: executionMode === "async" ? 202 : 200,
+      statusCode: 202,
       executionMode,
     };
   }
@@ -164,14 +222,14 @@ export async function dispatchToAgent(
     const errorText = await response.text().catch(() => "");
     const t = await getSystemTranslator();
     throw new Error(
-      `Agent ${t(`tasks.dispatchType.${type}`)} 失败: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`
+      `Agent ${t(`tasks.dispatchType.${type}`)} 失败: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
     );
   }
 
-  if (executionMode === "async" && response.status !== 202) {
+  if (response.status !== 202) {
     const t = await getSystemTranslator();
     throw new Error(
-      `Agent ${t(`tasks.dispatchType.${type}`)} 未按异步协议返回 202 Accepted，实际返回 ${response.status}`
+      `Agent ${t(`tasks.dispatchType.${type}`)} 未按异步协议返回 202 Accepted，实际返回 ${response.status}`,
     );
   }
 

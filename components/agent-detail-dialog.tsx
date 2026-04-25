@@ -15,14 +15,19 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
-  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Cpu,
+  Globe,
   HardDrive,
-  Network,
+  Info,
+  Layers,
   Server,
+  Shield,
   Timer,
   Wifi,
   WifiOff,
-  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { formatAgentReportMode } from "@/lib/utils";
@@ -131,13 +136,14 @@ export function AgentDetailDialog({
   const StatusIcon = statusConfig.icon;
   const devices = data?.data ?? [];
   const reachableDevices = devices.filter(
-    (device) => device.status === "reachable"
+    (device) => device.status === "reachable",
   ).length;
   const unreachableDevices = devices.filter(
-    (device) => device.status === "unreachable"
+    (device) => device.status === "unreachable",
   ).length;
   const displayVersion = liveInfo?.version ?? agent.version;
-  const displayUptimeSeconds = liveInfo?.uptimeSeconds ?? Number(agent.uptimeSeconds);
+  const displayUptimeSeconds =
+    liveInfo?.uptimeSeconds ?? Number(agent.uptimeSeconds);
   const displayConnectionsCount =
     liveInfo?.connectionsCount ?? agent.connectionsCount;
   const displayTemplatesCount =
@@ -210,14 +216,6 @@ export function AgentDetailDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="text-xs text-muted-foreground">
-                  {td("agentDetailActiveSessions")}
-                </div>
-                <div className="mt-1 text-2xl font-semibold">
-                  {agent.activeSessions}
-                </div>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="text-xs text-muted-foreground">
                   {td("agentDetailRunningTasks")}
                 </div>
                 <div className="mt-1 text-2xl font-semibold">
@@ -272,7 +270,9 @@ export function AgentDetailDialog({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">{td("agentDetailDevices")}</h4>
+              <h4 className="text-sm font-medium">
+                {td("agentDetailDevices")}
+              </h4>
               <span className="text-xs text-muted-foreground">
                 {td("agentDetailDevicesCount", { count: devices.length })}
               </span>
@@ -323,7 +323,9 @@ export function AgentDetailDialog({
                       className="flex items-center justify-between rounded-lg border bg-muted/10 px-3 py-2"
                     >
                       <div className="min-w-0">
-                        <div className="font-medium truncate">{device.name}</div>
+                        <div className="font-medium truncate">
+                          {device.name}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {device.host}
                           {device.port ? `:${device.port}` : ""}
@@ -352,7 +354,9 @@ export function AgentDetailDialog({
                   ))}
                   {devices.length > 8 && (
                     <p className="text-xs text-muted-foreground">
-                      {td("agentDetailMoreDevices", { count: devices.length - 8 })}
+                      {td("agentDetailMoreDevices", {
+                        count: devices.length - 8,
+                      })}
                     </p>
                   )}
                 </div>

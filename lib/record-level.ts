@@ -1,15 +1,25 @@
-import type { DispatchType } from "@/lib/types";
+import type { DispatchType, RecordLevel } from "@/lib/types";
 
-const DEFAULT_RECORD_LEVEL_MAP: Partial<
-  Record<DispatchType, "Off" | "KeyEventsOnly" | "Full">
-> = {
+const DEFAULT_RECORD_LEVEL_MAP: Partial<Record<DispatchType, RecordLevel>> = {
   tx_block: "KeyEventsOnly",
   tx_workflow: "KeyEventsOnly",
   orchestrate: "KeyEventsOnly",
+  exec: "KeyEventsOnly",
+  template: "KeyEventsOnly",
 };
 
-export function getDefaultRecordLevelForType(
-  type: DispatchType
-): "Off" | "KeyEventsOnly" | "Full" {
-  return DEFAULT_RECORD_LEVEL_MAP[type] ?? "Off";
+export function normalizeRecordLevel(value: unknown): RecordLevel | undefined {
+  if (value === "Full") {
+    return "Full";
+  }
+
+  if (value === "KeyEventsOnly" || value === "Off") {
+    return "KeyEventsOnly";
+  }
+
+  return undefined;
+}
+
+export function getDefaultRecordLevelForType(type: DispatchType): RecordLevel {
+  return DEFAULT_RECORD_LEVEL_MAP[type] ?? "KeyEventsOnly";
 }

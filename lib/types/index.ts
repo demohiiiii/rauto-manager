@@ -13,7 +13,6 @@ export interface Agent {
   version?: string;
   connectionsCount: number;
   templatesCount: number;
-  activeSessions: number;
   runningTasksCount: number;
   uptimeSeconds: number | bigint;
   createdAt: Date;
@@ -85,6 +84,8 @@ export type DispatchType =
   | "tx_workflow"
   | "orchestrate";
 
+export type RecordLevel = "KeyEventsOnly" | "Full";
+
 export interface Task {
   id: string;
   name: string;
@@ -97,6 +98,7 @@ export interface Task {
   payload: Record<string, any>;
   status: "pending" | "queued" | "running" | "success" | "failed" | "cancelled";
   result?: TaskResult;
+  resultSummary?: string | null;
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;
@@ -129,6 +131,7 @@ export interface TaskResult {
   output?: string;
   error?: string;
   executionTime?: number;
+  summary?: string;
 }
 
 export interface TaskCreateInput {
@@ -260,6 +263,7 @@ export interface ConnectionPayload {
   enable_password?: string;
   ssh_security?: string;
   device_profile?: string;
+  linux_shell_flavor?: string;
   template_dir?: string;
 }
 
@@ -270,7 +274,7 @@ export interface DispatchRequest {
   connection?: ConnectionPayload;
   payload: Record<string, unknown>;
   dry_run?: boolean;
-  record_level?: "Off" | "KeyEventsOnly" | "Full";
+  record_level?: RecordLevel;
 }
 
 // ===== Agent communication types =====
@@ -290,7 +294,6 @@ export interface AgentRegisterInput {
 export interface AgentHeartbeatInput {
   name: string;
   status: string;
-  active_sessions?: number;
   running_tasks?: number;
   connections_count?: number;
   templates_count?: number;
@@ -311,6 +314,8 @@ export interface TaskCallbackInput {
   completed_at?: string;
   execution_time_ms?: number;
   result?: Record<string, unknown>;
+  result_json?: string | null;
+  result_summary_json?: string | null;
   error?: string;
 }
 

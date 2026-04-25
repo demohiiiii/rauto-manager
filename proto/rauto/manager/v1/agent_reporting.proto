@@ -18,13 +18,13 @@ message AckResponse {
 }
 
 message RegisterAgentRequest {
-  string name = 1;
-  string host = 2;
-  uint32 port = 3;
-  string version = 4;
-  repeated string capabilities = 5;
-  uint32 connections_count = 6;
-  uint32 templates_count = 7;
+  string          name              = 1;
+  string          host              = 2;
+  uint32          port              = 3;
+  string          version           = 4;
+  repeated string capabilities      = 5;
+  uint32          connections_count = 6;
+  uint32          templates_count   = 7;
 }
 
 message RegisterAgentResponse {
@@ -32,13 +32,12 @@ message RegisterAgentResponse {
 }
 
 message HeartbeatRequest {
-  string name = 1;
-  string status = 2;
-  uint32 active_sessions = 3;
-  uint32 running_tasks = 4;
-  uint32 connections_count = 5;
-  uint32 templates_count = 6;
-  uint64 uptime_seconds = 7;
+  string name              = 1;
+  string status            = 2;
+  uint32 running_tasks     = 3;
+  uint32 connections_count = 4;
+  uint32 templates_count   = 5;
+  uint64 uptime_seconds    = 6;
 }
 
 message OfflineRequest {
@@ -46,73 +45,74 @@ message OfflineRequest {
 }
 
 message ReportedInventoryDevice {
-  string name = 1;
-  string host = 2;
-  uint32 port = 3;
+  string name           = 1;
+  string host           = 2;
+  uint32 port           = 3;
   string device_profile = 4;
 }
 
 message ReportedDeviceStatus {
-  string name = 1;
-  string host = 2;
-  bool reachable = 3;
+  string name      = 1;
+  string host      = 2;
+  bool   reachable = 3;
 }
 
 message ReportDevicesRequest {
-  string name = 1;
+  string                           name    = 1;
   repeated ReportedInventoryDevice devices = 2;
 }
 
 message ReportDevicesResponse {
-  bool success = 1;
-  uint32 synced = 2;
+  bool   success = 1;
+  uint32 synced  = 2;
 }
 
 message UpdateDeviceStatusRequest {
-  string name = 1;
+  string                        name    = 1;
   repeated ReportedDeviceStatus devices = 2;
 }
 
 message UpdateDeviceStatusResponse {
-  bool success = 1;
+  bool   success = 1;
   uint32 updated = 2;
 }
 
 message ReportErrorRequest {
-  string name = 1;
-  string category = 2;
-  string kind = 3;
-  string severity = 4;
-  string occurred_at = 5;
-  optional string task_id = 6;
-  optional string operation = 7;
-  optional string target_url = 8;
-  optional string http_method = 9;
-  optional uint32 http_status = 10;
-  bool retryable = 11;
-  string message = 12;
+  string          name         = 1;
+  string          category     = 2;
+  string          kind         = 3;
+  string          severity     = 4;
+  string          occurred_at  = 5;
+  optional string task_id      = 6;
+  optional string operation    = 7;
+  optional string target_url   = 8;
+  optional string http_method  = 9;
+  optional uint32 http_status  = 10;
+  bool            retryable    = 11;
+  string          message      = 12;
   optional string details_json = 13;
 }
 
 message TaskCallbackRequest {
-  string agent_name = 1;
-  string task_id = 2;
-  string status = 3;
-  string started_at = 4;
-  string completed_at = 5;
-  uint64 execution_time_ms = 6;
-  optional string result_json = 7;
-  optional string error = 8;
+  string          agent_name          = 1;
+  string          task_id             = 2;
+  string          status              = 3;
+  string          started_at          = 4;
+  string          completed_at        = 5;
+  uint64          execution_time_ms   = 6;
+  optional string result_json         = 7;
+  optional string error               = 8;
+  optional string result_summary_json = 9;
 }
 
 message TaskEventRequest {
-  string task_id = 1;
-  string agent_name = 2;
-  string event_type = 3;
-  string message = 4;
-  string level = 5;
-  optional string stage = 6;
-  optional uint32 progress = 7;
+  string          task_id      = 1;
+  string          agent_name   = 2;
+  string          event_type   = 3;
+  string          message      = 4;
+  string          level        = 5;
+  optional string stage        = 6;
+  optional uint32 progress     = 7;
   optional string details_json = 8;
-  string occurred_at = 9;
+  string          occurred_at  = 9;
 }

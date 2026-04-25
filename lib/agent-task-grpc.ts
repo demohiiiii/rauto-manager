@@ -1,10 +1,13 @@
 import path from "node:path";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
+import { normalizeRecordLevel } from "@/lib/record-level";
+import { buildTxBlockJsonFromPayload } from "@/lib/tx-block-serialize";
 import type {
   AgentReportMode,
   ConnectionPayload,
   DispatchType,
+  RecordLevel,
 } from "@/lib/types";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
@@ -14,7 +17,7 @@ const PROTO_PATH = path.join(
   "rauto",
   "agent",
   "v1",
-  "task_service.proto"
+  "task_service.proto",
 );
 const DEFAULT_GRPC_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
 
@@ -54,8 +57,7 @@ interface GrpcDispatchOptions {
   timeoutMs: number;
 }
 
-const RECORD_LEVEL_MAP: Record<string, string> = {
-  Off: "off",
+const RECORD_LEVEL_MAP: Record<RecordLevel, string> = {
   KeyEventsOnly: "key-events-only",
   Full: "full",
 };
@@ -91,7 +93,9 @@ function loadAgentTaskServiceClientCtor(): grpc.ServiceClientConstructor {
     oneofs: true,
   });
 
-  const grpcObject = grpc.loadPackageDefinition(packageDefinition) as grpc.GrpcObject;
+  const grpcObject = grpc.loadPackageDefinition(
+    packageDefinition,
+  ) as grpc.GrpcObject;
   const rautoPackage = grpcObject.rauto as grpc.GrpcObject;
   const agentPackage = rautoPackage.agent as grpc.GrpcObject;
   const versionPackage = agentPackage.v1 as grpc.GrpcObject;
@@ -133,12 +137,9 @@ function stringifyJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function normalizeRecordLevel(recordLevel?: string): string {
-  if (!recordLevel) {
-    return "";
-  }
-
-  return RECORD_LEVEL_MAP[recordLevel] ?? recordLevel;
+function toGrpcRecordLevel(recordLevel?: string): string {
+  const normalized = normalizeRecordLevel(recordLevel);
+  return normalized ? RECORD_LEVEL_MAP[normalized] : "";
 }
 
 function toOptionalString(value: unknown): string {
@@ -149,22 +150,8 @@ function toOptionalBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
-function toOptionalInteger(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
-    return value;
-  }
-
-  return undefined;
-}
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
 function mapConnectionRef(
-  connection?: Record<string, unknown>
+  connection?: Record<string, unknown>,
 ): ConnectionPayload | undefined {
   if (!connection || !isRecord(connection)) {
     return undefined;
@@ -200,6 +187,9 @@ function mapConnectionRef(
   if (typeof connection.device_profile === "string") {
     mapped.device_profile = connection.device_profile;
   }
+  if (typeof connection.linux_shell_flavor === "string") {
+    mapped.linux_shell_flavor = connection.linux_shell_flavor;
+  }
 
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 }
@@ -210,7 +200,7 @@ function buildGrpcRequest(options: GrpcDispatchOptions): {
 } {
   const { type, taskId, connection, payload, dryRun, recordLevel } = options;
   const connectionRef = mapConnectionRef(connection);
-  const normalizedRecordLevel = normalizeRecordLevel(recordLevel);
+  const normalizedRecordLevel = toGrpcRecordLevel(recordLevel);
   const method = GRPC_METHOD_MAP[type];
 
   switch (type) {
@@ -239,34 +229,18 @@ function buildGrpcRequest(options: GrpcDispatchOptions): {
         },
       };
     case "tx_block":
+      const hasCommands =
+        Array.isArray(payload.commands) && payload.commands.length > 0;
       return {
         method,
         request: {
           task_id: taskId,
-          name: toOptionalString(payload.name),
-          template: toOptionalString(payload.template),
-          vars_json: stringifyJson(payload.vars ?? null),
-          commands: toStringArray(payload.commands),
-          rollback_commands: toStringArray(payload.rollback_commands),
-          rollback_on_failure:
-            typeof payload.rollback_on_failure === "boolean"
-              ? payload.rollback_on_failure
-              : true,
-          ...(toOptionalInteger(payload.rollback_trigger_step_index) !== undefined
-            ? {
-                rollback_trigger_step_index: toOptionalInteger(
-                  payload.rollback_trigger_step_index
-                ),
-              }
-            : {}),
-          mode: toOptionalString(payload.mode),
-          ...(toOptionalInteger(payload.timeout_secs) !== undefined
-            ? { timeout_secs: toOptionalInteger(payload.timeout_secs) }
-            : {}),
-          resource_rollback_command: toOptionalString(
-            payload.resource_rollback_command
-          ),
-          template_profile: toOptionalString(payload.template_profile),
+          tx_block_json: buildTxBlockJsonFromPayload(payload),
+          tx_block_template_name: hasCommands
+            ? ""
+            : toOptionalString(payload.template),
+          tx_block_template_content: toOptionalString(payload.template_content),
+          tx_block_template_vars_json: stringifyJson(payload.vars ?? {}),
           dry_run: dryRun ?? false,
           ...(connectionRef ? { connection: connectionRef } : {}),
           record_level: normalizedRecordLevel,
@@ -315,18 +289,16 @@ function callUnaryMethod(
   client: grpc.Client,
   method: GrpcDispatchMethod,
   request: GrpcRequestPayload,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<GrpcResponsePayload> {
   const metadata = createMetadata();
   const deadline = new Date(Date.now() + timeoutMs);
-  const methodFn = (
-    client as grpc.Client & Record<string, unknown>
-  )[method] as
+  const methodFn = (client as grpc.Client & Record<string, unknown>)[method] as
     | ((
         req: GrpcRequestPayload,
         md: grpc.Metadata,
         options: grpc.CallOptions,
-        callback: (error: grpc.ServiceError | null, response?: unknown) => void
+        callback: (error: grpc.ServiceError | null, response?: unknown) => void,
       ) => grpc.ClientUnaryCall)
     | undefined;
 
@@ -336,26 +308,32 @@ function callUnaryMethod(
   }
 
   return new Promise((resolve, reject) => {
-    methodFn.call(client, request, metadata, { deadline }, (error, response) => {
-      client.close();
+    methodFn.call(
+      client,
+      request,
+      metadata,
+      { deadline },
+      (error, response) => {
+        client.close();
 
-      if (error) {
-        reject(new Error(getErrorMessage(error, method)));
-        return;
-      }
+        if (error) {
+          reject(new Error(getErrorMessage(error, method)));
+          return;
+        }
 
-      if (isRecord(response)) {
-        resolve(response);
-        return;
-      }
+        if (isRecord(response)) {
+          resolve(response);
+          return;
+        }
 
-      resolve({});
-    });
+        resolve({});
+      },
+    );
   });
 }
 
 export async function dispatchTaskOverGrpc(
-  options: GrpcDispatchOptions
+  options: GrpcDispatchOptions,
 ): Promise<GrpcResponsePayload> {
   const { agent, timeoutMs } = options;
   const address = `${agent.host}:${agent.port}`;
@@ -378,21 +356,21 @@ interface GrpcAgentCallOptions {
 }
 
 export async function getAgentInfoOverGrpc(
-  options: GrpcAgentCallOptions
+  options: GrpcAgentCallOptions,
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "GetAgentInfo", {}, options.timeoutMs);
 }
 
 export async function getAgentStatusOverGrpc(
-  options: GrpcAgentCallOptions
+  options: GrpcAgentCallOptions,
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "GetAgentStatus", {}, options.timeoutMs);
 }
 
 export async function listConnectionsOverGrpc(
-  options: GrpcAgentCallOptions
+  options: GrpcAgentCallOptions,
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "ListConnections", {}, options.timeoutMs);
@@ -414,7 +392,7 @@ export async function upsertConnectionOverGrpc(options: {
       connection: mapConnectionRef(options.connection),
       save_password: options.savePassword ?? true,
     },
-    options.timeoutMs
+    options.timeoutMs,
   );
 }
 
@@ -430,19 +408,19 @@ export async function testConnectionOverGrpc(options: {
     {
       connection: mapConnectionRef(options.connection),
     },
-    options.timeoutMs
+    options.timeoutMs,
   );
 }
 
 export async function listTemplatesOverGrpc(
-  options: GrpcAgentCallOptions
+  options: GrpcAgentCallOptions,
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "ListTemplates", {}, options.timeoutMs);
 }
 
 export async function listDeviceProfilesOverGrpc(
-  options: GrpcAgentCallOptions
+  options: GrpcAgentCallOptions,
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "ListDeviceProfiles", {}, options.timeoutMs);
@@ -458,7 +436,7 @@ export async function listProfileModesOverGrpc(options: {
     client,
     "ListProfileModes",
     { name: options.name },
-    options.timeoutMs
+    options.timeoutMs,
   );
 }
 
@@ -474,8 +452,9 @@ export async function probeDevicesOverGrpc(options: {
     "ProbeDevices",
     {
       connections: options.connections,
-      timeout_secs: options.timeoutSecs ?? Math.max(1, Math.ceil(options.timeoutMs / 1000)),
+      timeout_secs:
+        options.timeoutSecs ?? Math.max(1, Math.ceil(options.timeoutMs / 1000)),
     },
-    options.timeoutMs
+    options.timeoutMs,
   );
 }

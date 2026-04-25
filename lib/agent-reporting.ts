@@ -20,7 +20,7 @@ export type AgentReportingErrorCode =
 export class AgentReportingError extends Error {
   constructor(
     public readonly code: AgentReportingErrorCode,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "AgentReportingError";
@@ -76,6 +76,7 @@ export interface TaskCallbackReportInput {
   execution_time_ms?: number;
   result?: unknown;
   result_json?: string | null;
+  result_summary_json?: string | null;
   error?: string | null;
 }
 
@@ -98,14 +99,17 @@ interface AgentReportingTransportOptions {
 
 function reportingError(
   code: AgentReportingErrorCode,
-  message: string
+  message: string,
 ): AgentReportingError {
   return new AgentReportingError(code, message);
 }
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw reportingError("INVALID_ARGUMENT", `Missing required field: ${field}`);
+    throw reportingError(
+      "INVALID_ARGUMENT",
+      `Missing required field: ${field}`,
+    );
   }
 
   return value.trim();
@@ -115,14 +119,17 @@ function requirePositivePort(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      `Field ${field} must be a positive integer`
+      `Field ${field} must be a positive integer`,
     );
   }
 
   return value;
 }
 
-function parseOptionalDate(value: string | undefined, field: string): Date | undefined {
+function parseOptionalDate(
+  value: string | undefined,
+  field: string,
+): Date | undefined {
   if (!value?.trim()) {
     return undefined;
   }
@@ -131,7 +138,7 @@ function parseOptionalDate(value: string | undefined, field: string): Date | und
   if (Number.isNaN(date.getTime())) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      `Field ${field} must be a valid ISO date string`
+      `Field ${field} must be a valid ISO date string`,
     );
   }
 
@@ -140,7 +147,7 @@ function parseOptionalDate(value: string | undefined, field: string): Date | und
 
 function parseOptionalJson(
   json: string | null | undefined,
-  field: string
+  field: string,
 ): Prisma.InputJsonValue | undefined {
   if (!json?.trim()) {
     return undefined;
@@ -151,7 +158,7 @@ function parseOptionalJson(
   } catch {
     throw reportingError(
       "INVALID_ARGUMENT",
-      `Field ${field} must contain valid JSON`
+      `Field ${field} must contain valid JSON`,
     );
   }
 }
@@ -164,7 +171,7 @@ function parseOptionalProgress(value: number | undefined): number | undefined {
   if (!Number.isFinite(value)) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      "Field progress must be a finite number"
+      "Field progress must be a finite number",
     );
   }
 
@@ -221,7 +228,7 @@ function shouldKeepValue(value: unknown): boolean {
 
 function deepMergeJsonObjects(
   existing: Record<string, unknown>,
-  incoming: Record<string, unknown>
+  incoming: Record<string, unknown>,
 ): Prisma.InputJsonValue {
   const merged: Record<string, unknown> = { ...existing };
 
@@ -245,7 +252,7 @@ function deepMergeJsonObjects(
 
 function mergeResultPayload(
   existing: unknown,
-  incoming: Prisma.InputJsonValue | undefined
+  incoming: Prisma.InputJsonValue | undefined,
 ): Prisma.InputJsonValue | undefined {
   if (incoming === undefined) {
     return cloneJsonValue(existing);
@@ -271,7 +278,10 @@ function mergeSerializedResult(existing: string, incoming: string): string {
   try {
     const existingParsed = JSON.parse(existing) as unknown;
     const incomingParsed = JSON.parse(incoming) as unknown;
-    const merged = mergeResultPayload(existingParsed, cloneJsonValue(incomingParsed));
+    const merged = mergeResultPayload(
+      existingParsed,
+      cloneJsonValue(incomingParsed),
+    );
     return serializeResult(merged);
   } catch {
     return incoming;
@@ -280,7 +290,7 @@ function mergeSerializedResult(existing: string, incoming: string): string {
 
 function normalizeInputJsonValue(
   value: unknown,
-  field: string
+  field: string,
 ): Prisma.InputJsonValue | undefined {
   if (value === undefined) {
     return undefined;
@@ -291,13 +301,13 @@ function normalizeInputJsonValue(
   } catch {
     throw reportingError(
       "INVALID_ARGUMENT",
-      `Field ${field} must be JSON-serializable`
+      `Field ${field} must be JSON-serializable`,
     );
   }
 }
 
 function asJsonObject(
-  value: Prisma.InputJsonValue | undefined
+  value: Prisma.InputJsonValue | undefined,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -306,9 +316,21 @@ function asJsonObject(
   return value as Record<string, unknown>;
 }
 
+function extractTaskSummaryText(
+  resultSummaryJson: string | null | undefined,
+): string | undefined {
+  const parsed = parseOptionalJson(resultSummaryJson, "result_summary_json");
+  const parsedObject = asJsonObject(parsed);
+  const summary = parsedObject?.summary;
+
+  return typeof summary === "string" && summary.trim()
+    ? summary.trim()
+    : undefined;
+}
+
 function getObjectString(
   value: Record<string, unknown> | null,
-  key: string
+  key: string,
 ): string | undefined {
   const candidate = value?.[key];
   return typeof candidate === "string" && candidate.trim()
@@ -318,7 +340,7 @@ function getObjectString(
 
 function getObjectNumber(
   value: Record<string, unknown> | null,
-  key: string
+  key: string,
 ): number | undefined {
   const candidate = value?.[key];
   return typeof candidate === "number" && Number.isFinite(candidate)
@@ -328,7 +350,7 @@ function getObjectNumber(
 
 function shouldMarkTaskFailedFromErrorReport(
   input: AgentErrorReportInput,
-  details: Prisma.InputJsonValue | undefined
+  details: Prisma.InputJsonValue | undefined,
 ): {
   shouldMarkFailed: boolean;
   startedAt?: Date;
@@ -354,12 +376,11 @@ function shouldMarkTaskFailedFromErrorReport(
   return {
     shouldMarkFailed: true,
     startedAt: parseOptionalDate(startedAtValue, "details.started_at"),
-    completedAt: parseOptionalDate(
-      completedAtValue,
-      "details.completed_at"
-    ),
+    completedAt: parseOptionalDate(completedAtValue, "details.completed_at"),
     executionTimeMs:
-      executionTimeMs !== undefined ? Math.max(0, Math.round(executionTimeMs)) : undefined,
+      executionTimeMs !== undefined
+        ? Math.max(0, Math.round(executionTimeMs))
+        : undefined,
     errorMessage: input.message?.trim() || input.kind,
   };
 }
@@ -370,7 +391,9 @@ function summarizeTaskCommand(task: {
   payload: Prisma.JsonValue;
 }): string {
   const payload =
-    task.payload && typeof task.payload === "object" && !Array.isArray(task.payload)
+    task.payload &&
+    typeof task.payload === "object" &&
+    !Array.isArray(task.payload)
       ? (task.payload as Record<string, unknown>)
       : {};
 
@@ -393,7 +416,7 @@ function summarizeTaskCommand(task: {
 function normalizeTerminalEventResult(
   eventType: "completed" | "failed",
   message: string,
-  details: Prisma.InputJsonValue | undefined
+  details: Prisma.InputJsonValue | undefined,
 ): Prisma.InputJsonValue {
   const success = eventType === "completed";
   const detailsObject = asJsonObject(details);
@@ -431,7 +454,7 @@ async function upsertExecutionHistory(
     output: string;
     status: "success" | "failed";
     executionTime: number;
-  }
+  },
 ) {
   const existing = await tx.executionHistory.findFirst({
     where: {
@@ -461,15 +484,34 @@ async function upsertExecutionHistory(
 }
 
 function normalizeTaskCallbackResult(
-  input: TaskCallbackReportInput
+  input: TaskCallbackReportInput,
 ): Prisma.InputJsonValue {
   const parsed = parseOptionalJson(input.result_json, "result_json");
-  const normalized =
-    normalizeInputJsonValue(input.result, "result") ?? parsed;
+  const normalized = normalizeInputJsonValue(input.result, "result") ?? parsed;
+  const summary = extractTaskSummaryText(input.result_summary_json);
 
   if (input.status === "success") {
-    return normalized ?? {
+    const normalizedObject = asJsonObject(normalized);
+
+    if (normalizedObject) {
+      return {
+        ...normalizedObject,
+        success: true,
+        ...(summary ? { summary } : {}),
+      };
+    }
+
+    if (normalized !== undefined) {
+      return {
+        success: true,
+        ...(summary ? { summary } : {}),
+        result: normalized,
+      };
+    }
+
+    return {
       success: true,
+      ...(summary ? { summary } : {}),
     };
   }
 
@@ -481,6 +523,7 @@ function normalizeTaskCallbackResult(
       ...normalizedObject,
       success: false,
       error: errorMessage,
+      ...(summary ? { summary } : {}),
     };
   }
 
@@ -488,6 +531,7 @@ function normalizeTaskCallbackResult(
     return {
       success: false,
       error: errorMessage,
+      ...(summary ? { summary } : {}),
       result: normalized,
     };
   }
@@ -495,6 +539,7 @@ function normalizeTaskCallbackResult(
   return {
     success: false,
     error: errorMessage,
+    ...(summary ? { summary } : {}),
   };
 }
 
@@ -523,7 +568,7 @@ function handlePrismaNotFound(error: unknown, message: string): never {
 
 export async function registerAgent(
   input: AgentRegisterInput,
-  options: AgentReportingTransportOptions = {}
+  options: AgentReportingTransportOptions = {},
 ) {
   const name = requireString(input.name, "name");
   const host = requireString(input.host, "host");
@@ -543,7 +588,6 @@ export async function registerAgent(
       capabilities: input.capabilities ?? [],
       connectionsCount: input.connections_count ?? 0,
       templatesCount: input.templates_count ?? 0,
-      activeSessions: 0,
       runningTasksCount: 0,
       uptimeSeconds: BigInt(0),
     },
@@ -582,7 +626,7 @@ export async function registerAgent(
 
 export async function sendHeartbeat(
   input: AgentHeartbeatInput,
-  options: AgentReportingTransportOptions = {}
+  options: AgentReportingTransportOptions = {},
 ): Promise<void> {
   const name = requireString(input.name, "name");
   const reportMode = options.reportMode ?? "http";
@@ -594,7 +638,6 @@ export async function sendHeartbeat(
         lastHeartbeat: new Date(),
         reportMode,
         status: input.status?.trim() || "online",
-        activeSessions: input.active_sessions ?? undefined,
         runningTasksCount: input.running_tasks ?? undefined,
         connectionsCount: input.connections_count ?? undefined,
         templatesCount: input.templates_count ?? undefined,
@@ -611,7 +654,7 @@ export async function sendHeartbeat(
 
 export async function notifyOffline(
   input: AgentOfflineInput,
-  options: AgentReportingTransportOptions = {}
+  options: AgentReportingTransportOptions = {},
 ): Promise<void> {
   const name = requireString(input.name, "name");
   const t = await getSystemTranslator();
@@ -623,7 +666,6 @@ export async function notifyOffline(
       data: {
         reportMode,
         status: "offline",
-        activeSessions: 0,
         runningTasksCount: 0,
         uptimeSeconds: BigInt(0),
       },
@@ -642,7 +684,7 @@ export async function notifyOffline(
 }
 
 export async function reportDevices(
-  input: ReportDevicesInput
+  input: ReportDevicesInput,
 ): Promise<{ synced: number }> {
   const name = requireString(input.name, "name");
   if (!Array.isArray(input.devices)) {
@@ -662,11 +704,11 @@ export async function reportDevices(
         const deviceName = requireString(device.name, "devices[].name");
         const host = requireString(device.host, "devices[].host");
         return `${deviceName}:${host}`;
-      })
+      }),
     );
 
     const toDelete = existingDevices.filter(
-      (device) => !reportedKeys.has(`${device.name}:${device.host}`)
+      (device) => !reportedKeys.has(`${device.name}:${device.host}`),
     );
 
     if (toDelete.length > 0) {
@@ -680,7 +722,7 @@ export async function reportDevices(
       const deviceName = requireString(device.name, "devices[].name");
       const host = requireString(device.host, "devices[].host");
       const existing = existingDevices.find(
-        (item) => item.name === deviceName && item.host === host
+        (item) => item.name === deviceName && item.host === host,
       );
 
       if (existing) {
@@ -691,7 +733,7 @@ export async function reportDevices(
               type: device.device_profile?.trim() || existing.type,
               port: toOptionalPort(device.port) ?? existing.port,
             },
-          })
+          }),
         );
         continue;
       }
@@ -706,7 +748,7 @@ export async function reportDevices(
             port: toOptionalPort(device.port),
             status: "unknown",
           },
-        })
+        }),
       );
     }
 
@@ -732,7 +774,7 @@ export async function reportDevices(
 }
 
 export async function updateDeviceStatuses(
-  input: UpdateDeviceStatusInput
+  input: UpdateDeviceStatusInput,
 ): Promise<{ updated: number }> {
   const name = requireString(input.name, "name");
   if (!Array.isArray(input.devices)) {
@@ -770,7 +812,7 @@ export async function updateDeviceStatuses(
 }
 
 export async function reportAgentError(
-  input: AgentErrorReportInput
+  input: AgentErrorReportInput,
 ): Promise<{ eventId: string; taskMarkedFailed: boolean }> {
   const name = requireString(input.name, "name");
   const category = requireString(input.category, "category");
@@ -779,13 +821,16 @@ export async function reportAgentError(
   const occurredAt = parseOptionalDate(input.occurred_at, "occurred_at");
 
   if (!occurredAt) {
-    throw reportingError("INVALID_ARGUMENT", "Missing required field: occurred_at");
+    throw reportingError(
+      "INVALID_ARGUMENT",
+      "Missing required field: occurred_at",
+    );
   }
 
   if (!["warning", "error"].includes(severity)) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      "Field severity must be either 'warning' or 'error'"
+      "Field severity must be either 'warning' or 'error'",
     );
   }
 
@@ -793,7 +838,10 @@ export async function reportAgentError(
     normalizeInputJsonValue(input.details, "details") ??
     parseOptionalJson(input.details_json, "details_json") ??
     {};
-  const fallbackTaskFailure = shouldMarkTaskFailedFromErrorReport(input, details);
+  const fallbackTaskFailure = shouldMarkTaskFailedFromErrorReport(
+    input,
+    details,
+  );
   const t = await getSystemTranslator();
 
   const eventId = `err_${nanoid(16)}`;
@@ -946,7 +994,7 @@ export async function reportAgentError(
 }
 
 export async function reportTaskExecutionEvent(
-  input: TaskExecutionEventReportInput
+  input: TaskExecutionEventReportInput,
 ): Promise<void> {
   const taskId = requireString(input.task_id, "task_id");
   const agentName = requireString(input.agent_name, "agent_name");
@@ -965,7 +1013,7 @@ export async function reportTaskExecutionEvent(
   if (!["info", "success", "warning", "error"].includes(level)) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      "Field level must be one of: info, success, warning, error"
+      "Field level must be one of: info, success, warning, error",
     );
   }
 
@@ -974,169 +1022,171 @@ export async function reportTaskExecutionEvent(
     parseOptionalJson(input.details_json, "details_json");
   const t = await getSystemTranslator();
 
-  const notification =
-    await prisma.$transaction(async (tx): Promise<{
+  const notification = await prisma.$transaction(
+    async (
+      tx,
+    ): Promise<{
       taskName: string;
       agentId: string;
       dispatchType: string;
       status: "success" | "failed";
     } | null> => {
-    const [task, agent] = await Promise.all([
-      tx.task.findUnique({
-        where: { id: taskId },
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          startedAt: true,
-          completedAt: true,
-          result: true,
-          dispatchType: true,
-          template: true,
-          payload: true,
-        },
-      }),
-      tx.agent.findUnique({
-        where: { name: agentName },
-        select: { id: true, name: true },
-      }),
-    ]);
+      const [task, agent] = await Promise.all([
+        tx.task.findUnique({
+          where: { id: taskId },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            startedAt: true,
+            completedAt: true,
+            result: true,
+            dispatchType: true,
+            template: true,
+            payload: true,
+          },
+        }),
+        tx.agent.findUnique({
+          where: { name: agentName },
+          select: { id: true, name: true },
+        }),
+      ]);
 
-    if (!task) {
-      throw reportingError("NOT_FOUND", `Task not found: ${taskId}`);
-    }
+      if (!task) {
+        throw reportingError("NOT_FOUND", `Task not found: ${taskId}`);
+      }
 
-    if (!agent) {
-      throw reportingError("NOT_FOUND", `Agent not found: ${agentName}`);
-    }
+      if (!agent) {
+        throw reportingError("NOT_FOUND", `Agent not found: ${agentName}`);
+      }
 
-    if (task.status === "pending" || task.status === "queued") {
-      await tx.task.update({
-        where: { id: taskId },
+      if (task.status === "pending" || task.status === "queued") {
+        await tx.task.update({
+          where: { id: taskId },
+          data: {
+            status: "running",
+            startedAt: task.startedAt ?? occurredAt ?? new Date(),
+          },
+        });
+      }
+
+      await tx.taskExecutionEvent.create({
         data: {
-          status: "running",
-          startedAt: task.startedAt ?? occurredAt ?? new Date(),
+          taskId,
+          agentId: agent.id,
+          agentName: agent.name,
+          eventType,
+          level,
+          stage: input.stage?.trim() || null,
+          message,
+          progress,
+          details,
+          createdAt: occurredAt,
         },
       });
-    }
 
-    await tx.taskExecutionEvent.create({
-      data: {
-        taskId,
-        agentId: agent.id,
-        agentName: agent.name,
-        eventType,
-        level,
-        stage: input.stage?.trim() || null,
-        message,
-        progress,
-        details,
-        createdAt: occurredAt,
-      },
-    });
-
-    const isActiveTask = ["pending", "queued", "running"].includes(task.status);
-    const isTerminalEvent = terminalStatus !== null;
-
-    if (!isActiveTask && !isTerminalEvent) {
-      return null;
-    }
-
-    if (eventType === "completed") {
-      const resultData =
-        mergeResultPayload(
-          task.result,
-          normalizeTerminalEventResult("completed", message, details)
-        ) ?? { success: true };
-      const completedAt = occurredAt ?? task.completedAt ?? new Date();
-      const startedAt = task.startedAt ?? occurredAt ?? new Date();
-      const executionTime = Math.max(
-        0,
-        completedAt.getTime() - startedAt.getTime()
+      const isActiveTask = ["pending", "queued", "running"].includes(
+        task.status,
       );
+      const isTerminalEvent = terminalStatus !== null;
 
-      await tx.task.update({
-        where: { id: taskId },
-        data: {
-          status: "success",
-          startedAt,
-          completedAt,
-          result: resultData,
-        },
-      });
+      if (!isActiveTask && !isTerminalEvent) {
+        return null;
+      }
 
-      await upsertExecutionHistory(tx, {
-        taskId,
-        agentId: agent.id,
-        command: summarizeTaskCommand(task),
-        output: serializeResult(resultData),
-        status: "success",
-        executionTime,
-      });
-      return isActiveTask || task.status !== "success"
-        ? {
-            taskName: task.name,
-            agentId: agent.id,
-            dispatchType: task.dispatchType,
-            status: "success" as const,
-          }
-        : null;
-    }
-
-    if (eventType === "failed") {
-      const resultData =
-        mergeResultPayload(
+      if (eventType === "completed") {
+        const resultData = mergeResultPayload(
           task.result,
-          normalizeTerminalEventResult("failed", message, details)
+          normalizeTerminalEventResult("completed", message, details),
+        ) ?? { success: true };
+        const completedAt = occurredAt ?? task.completedAt ?? new Date();
+        const startedAt = task.startedAt ?? occurredAt ?? new Date();
+        const executionTime = Math.max(
+          0,
+          completedAt.getTime() - startedAt.getTime(),
+        );
+
+        await tx.task.update({
+          where: { id: taskId },
+          data: {
+            status: "success",
+            startedAt,
+            completedAt,
+            result: resultData,
+          },
+        });
+
+        await upsertExecutionHistory(tx, {
+          taskId,
+          agentId: agent.id,
+          command: summarizeTaskCommand(task),
+          output: serializeResult(resultData),
+          status: "success",
+          executionTime,
+        });
+        return isActiveTask || task.status !== "success"
+          ? {
+              taskName: task.name,
+              agentId: agent.id,
+              dispatchType: task.dispatchType,
+              status: "success" as const,
+            }
+          : null;
+      }
+
+      if (eventType === "failed") {
+        const resultData = mergeResultPayload(
+          task.result,
+          normalizeTerminalEventResult("failed", message, details),
         ) ?? {
           success: false,
           error: message,
         };
-      const completedAt = occurredAt ?? task.completedAt ?? new Date();
-      const startedAt = task.startedAt ?? occurredAt ?? new Date();
-      const executionTime = Math.max(
-        0,
-        completedAt.getTime() - startedAt.getTime()
-      );
+        const completedAt = occurredAt ?? task.completedAt ?? new Date();
+        const startedAt = task.startedAt ?? occurredAt ?? new Date();
+        const executionTime = Math.max(
+          0,
+          completedAt.getTime() - startedAt.getTime(),
+        );
 
-      await tx.task.update({
-        where: { id: taskId },
-        data: {
+        await tx.task.update({
+          where: { id: taskId },
+          data: {
+            status: "failed",
+            startedAt,
+            completedAt,
+            result: resultData,
+          },
+        });
+
+        await upsertExecutionHistory(tx, {
+          taskId,
+          agentId: agent.id,
+          command: summarizeTaskCommand(task),
+          output: serializeResult(resultData),
           status: "failed",
-          startedAt,
-          completedAt,
-          result: resultData,
-        },
-      });
+          executionTime,
+        });
+        return isActiveTask || task.status !== "failed"
+          ? {
+              taskName: task.name,
+              agentId: agent.id,
+              dispatchType: task.dispatchType,
+              status: "failed" as const,
+            }
+          : null;
+      }
 
-      await upsertExecutionHistory(tx, {
-        taskId,
-        agentId: agent.id,
-        command: summarizeTaskCommand(task),
-        output: serializeResult(resultData),
-        status: "failed",
-        executionTime,
-      });
-      return isActiveTask || task.status !== "failed"
-        ? {
-            taskName: task.name,
-            agentId: agent.id,
-            dispatchType: task.dispatchType,
-            status: "failed" as const,
-          }
-        : null;
-    }
-
-    return null;
-  });
+      return null;
+    },
+  );
 
   if (!notification) {
     return;
   }
 
   createNotification({
-    type:
-      notification.status === "success" ? "task_success" : "task_failed",
+    type: notification.status === "success" ? "task_success" : "task_failed",
     title:
       notification.status === "success"
         ? t("notifications.taskSuccess")
@@ -1165,16 +1215,17 @@ export async function reportTaskExecutionEvent(
 }
 
 export async function reportTaskCallback(
-  input: TaskCallbackReportInput
+  input: TaskCallbackReportInput,
 ): Promise<void> {
   const taskId = requireString(input.task_id, "task_id");
   const agentName = requireString(input.agent_name, "agent_name");
   const status = requireString(input.status, "status");
+  const resultSummaryRaw = input.result_summary_json?.trim() || null;
 
   if (!["success", "failed"].includes(status)) {
     throw reportingError(
       "INVALID_ARGUMENT",
-      "Field status must be either 'success' or 'failed'"
+      "Field status must be either 'success' or 'failed'",
     );
   }
 
@@ -1200,18 +1251,22 @@ export async function reportTaskCallback(
       throw reportingError("NOT_FOUND", `Task not found: ${taskId}`);
     }
 
-    const mergedResultData = mergeResultPayload(task.result, resultData) ?? resultData;
+    const mergedResultData =
+      mergeResultPayload(task.result, resultData) ?? resultData;
     const shouldNotify =
-      ["pending", "queued", "running"].includes(task.status) || task.status !== status;
+      ["pending", "queued", "running"].includes(task.status) ||
+      task.status !== status;
+    const taskUpdateData = {
+      status,
+      startedAt,
+      completedAt: completedAt ?? new Date(),
+      result: mergedResultData,
+      resultSummary: resultSummaryRaw,
+    } as Record<string, unknown>;
 
     const updated = await tx.task.update({
       where: { id: taskId },
-      data: {
-        status,
-        startedAt,
-        completedAt: completedAt ?? new Date(),
-        result: mergedResultData,
-      },
+      data: taskUpdateData,
     });
 
     await upsertExecutionHistory(tx, {

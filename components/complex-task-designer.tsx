@@ -41,7 +41,10 @@ import {
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import { getDefaultRecordLevelForType } from "@/lib/record-level";
-import { AUTO_PROFILE_MODE, normalizeDeviceProfileModes } from "@/lib/profile-mode";
+import {
+  AUTO_PROFILE_MODE,
+  normalizeDeviceProfileModes,
+} from "@/lib/profile-mode";
 import {
   isAgentAvailableStatus,
   cn,
@@ -49,7 +52,12 @@ import {
   formatAgentReportMode,
 } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -69,7 +77,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AgentConnection, DeviceProfileModes, DispatchType } from "@/lib/types";
+import type {
+  AgentConnection,
+  DeviceProfileModes,
+  DispatchType,
+} from "@/lib/types";
 import {
   buildTxWorkflowPayload,
   validateTxWorkflowForm,
@@ -85,7 +97,7 @@ import {
 } from "@/components/task-forms/orchestrate-form";
 
 type ComplexDispatchType = Extract<DispatchType, "tx_workflow" | "orchestrate">;
-type RecordLevel = "Off" | "KeyEventsOnly" | "Full";
+type RecordLevel = "KeyEventsOnly" | "Full";
 type WorkflowBlockKind = "config" | "show";
 type WorkflowRollbackPolicy = "per_step" | "none" | "whole_resource";
 type TxMode = string;
@@ -93,7 +105,9 @@ type StageStrategy = "serial" | "parallel";
 type OrchestrationActionKind = "tx_block" | "tx_workflow";
 type InspectorTab = "config" | "summary";
 
-const WORKFLOW_PROFILE_MODE_SUPPORTED_TYPES: ComplexDispatchType[] = ["tx_workflow"];
+const WORKFLOW_PROFILE_MODE_SUPPORTED_TYPES: ComplexDispatchType[] = [
+  "tx_workflow",
+];
 
 interface EntryNodeData extends Record<string, unknown> {
   kind: "entry";
@@ -136,7 +150,8 @@ function defaultWorkflowBlock(): TxWorkflowBlockFormData {
     kind: "config",
     failFast: true,
     rollbackPolicy: "per_step",
-    wholeResourceMode: AUTO_PROFILE_MODE as TxWorkflowBlockFormData["wholeResourceMode"],
+    wholeResourceMode:
+      AUTO_PROFILE_MODE as TxWorkflowBlockFormData["wholeResourceMode"],
     wholeResourceUndoCommand: "",
     wholeResourceTimeoutSecs: "",
     wholeResourceTriggerStepIndex: "",
@@ -159,12 +174,14 @@ function defaultOrchestrateStage(): OrchestrateStageFormData {
         commands: ["show version"],
       },
       null,
-      2
+      2,
     ),
   };
 }
 
-function cloneWorkflowBlockConfig(config: TxWorkflowBlockFormData): TxWorkflowBlockFormData {
+function cloneWorkflowBlockConfig(
+  config: TxWorkflowBlockFormData,
+): TxWorkflowBlockFormData {
   return {
     ...config,
     steps: config.steps.map((step) => ({ ...step })),
@@ -172,7 +189,7 @@ function cloneWorkflowBlockConfig(config: TxWorkflowBlockFormData): TxWorkflowBl
 }
 
 function cloneOrchestrateStageConfig(
-  config: OrchestrateStageFormData
+  config: OrchestrateStageFormData,
 ): OrchestrateStageFormData {
   return {
     ...config,
@@ -191,7 +208,10 @@ function createEntryNode(mode: ComplexDispatchType): DesignerNode {
   };
 }
 
-function createWorkflowNode(config: TxWorkflowBlockFormData, x: number): DesignerNode {
+function createWorkflowNode(
+  config: TxWorkflowBlockFormData,
+  x: number,
+): DesignerNode {
   return {
     id: makeId("workflow-block"),
     type: "designer",
@@ -200,7 +220,10 @@ function createWorkflowNode(config: TxWorkflowBlockFormData, x: number): Designe
   };
 }
 
-function createOrchestrateNode(config: OrchestrateStageFormData, x: number): DesignerNode {
+function createOrchestrateNode(
+  config: OrchestrateStageFormData,
+  x: number,
+): DesignerNode {
   return {
     id: makeId("orchestrate-stage"),
     type: "designer",
@@ -225,11 +248,15 @@ function isContentNode(node: DesignerNode): boolean {
   return node.id !== START_NODE_ID;
 }
 
-function isWorkflowNode(node: DesignerNode | undefined): node is DesignerNode & { data: WorkflowNodeData } {
+function isWorkflowNode(
+  node: DesignerNode | undefined,
+): node is DesignerNode & { data: WorkflowNodeData } {
   return !!node && node.data.kind === "workflow_block";
 }
 
-function isOrchestrateNode(node: DesignerNode | undefined): node is DesignerNode & { data: OrchestrateNodeData } {
+function isOrchestrateNode(
+  node: DesignerNode | undefined,
+): node is DesignerNode & { data: OrchestrateNodeData } {
   return !!node && node.data.kind === "orchestrate_stage";
 }
 
@@ -242,7 +269,7 @@ function sortByPosition(a: DesignerNode, b: DesignerNode): number {
 
 function getOrderedContentNodes(
   nodes: DesignerNode[],
-  edges: DesignerEdge[]
+  edges: DesignerEdge[],
 ): DesignerNode[] {
   const contentNodes = nodes.filter(isContentNode);
   const nodeMap = new Map(contentNodes.map((node) => [node.id, node]));
@@ -293,14 +320,18 @@ function nextNodeX(nodes: DesignerNode[]): number {
     return 280;
   }
 
-  const spacing = typeof window !== "undefined" && window.innerWidth < 640 ? 220 : 280;
+  const spacing =
+    typeof window !== "undefined" && window.innerWidth < 640 ? 220 : 280;
   return Math.max(...contentNodes.map((node) => node.position.x)) + spacing;
 }
 
 function EntryNode({ data }: NodeProps<Node<EntryNodeData>>) {
   const t = useTranslations("designer");
   const tc = useTranslations("common");
-  const label = data.mode === "tx_workflow" ? t("workflowBuilder") : t("orchestrationBuilder");
+  const label =
+    data.mode === "tx_workflow"
+      ? t("workflowBuilder")
+      : t("orchestrationBuilder");
   const description =
     data.mode === "tx_workflow" ? tc("workflow") : tc("orchestrate");
 
@@ -319,7 +350,10 @@ function EntryNode({ data }: NodeProps<Node<EntryNodeData>>) {
   );
 }
 
-function DesignerNodeCard({ data, selected }: NodeProps<Node<WorkflowNodeData | OrchestrateNodeData>>) {
+function DesignerNodeCard({
+  data,
+  selected,
+}: NodeProps<Node<WorkflowNodeData | OrchestrateNodeData>>) {
   const t = useTranslations("designer");
   const tf = useTranslations("taskForms");
 
@@ -332,7 +366,9 @@ function DesignerNodeCard({ data, selected }: NodeProps<Node<WorkflowNodeData | 
     data.kind === "workflow_block"
       ? `${data.config.steps.length} ${tf("step")} / ${data.config.kind} / ${data.config.rollbackPolicy}`
       : `${data.config.strategy} / ${data.config.actionKind} / ${
-          data.config.targetGroups.trim() || data.config.targetsJson.trim() ? "targets" : "unset"
+          data.config.targetGroups.trim() || data.config.targetsJson.trim()
+            ? "targets"
+            : "unset"
         }`;
 
   const Icon = data.kind === "workflow_block" ? FileCode2 : Network;
@@ -341,7 +377,9 @@ function DesignerNodeCard({ data, selected }: NodeProps<Node<WorkflowNodeData | 
     <div
       className={cn(
         "rauto-flow-node-card min-w-[180px] sm:min-w-[200px] lg:min-w-[220px] rounded-2xl border bg-card px-3 py-3 shadow-md transition-all sm:px-4",
-        selected ? "border-primary shadow-lg shadow-primary/15" : "border-border"
+        selected
+          ? "border-primary shadow-lg shadow-primary/15"
+          : "border-border",
       )}
     >
       <Handle
@@ -352,7 +390,9 @@ function DesignerNodeCard({ data, selected }: NodeProps<Node<WorkflowNodeData | 
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="space-y-1 min-w-0">
           <div className="text-sm font-semibold truncate">{title}</div>
-          <div className="text-xs text-muted-foreground line-clamp-2">{summary}</div>
+          <div className="text-xs text-muted-foreground line-clamp-2">
+            {summary}
+          </div>
         </div>
         <div className="rauto-flow-node-icon rounded-lg bg-muted p-1.5 text-muted-foreground flex-shrink-0 sm:p-2">
           <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -384,7 +424,12 @@ function CanvasSettingsSection({
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-2xl border bg-background/70 p-3 shadow-sm sm:p-4", className)}>
+    <section
+      className={cn(
+        "min-w-0 rounded-2xl border bg-background/70 p-3 shadow-sm sm:p-4",
+        className,
+      )}
+    >
       <div className="mb-4 space-y-1">
         <div className="text-sm font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
@@ -408,12 +453,16 @@ export function ComplexTaskDesigner() {
   const [connectionName, setConnectionName] = useState("");
   const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
-  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(
+    null,
+  );
   const [loadingProfileModes, setLoadingProfileModes] = useState(false);
-  const [profileModesError, setProfileModesError] = useState<string | null>(null);
+  const [profileModesError, setProfileModesError] = useState<string | null>(
+    null,
+  );
   const [dryRun, setDryRun] = useState(false);
   const [recordLevel, setRecordLevel] = useState<RecordLevel>(
-    getDefaultRecordLevelForType("tx_workflow")
+    getDefaultRecordLevelForType("tx_workflow"),
   );
   const [dispatching, setDispatching] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -438,7 +487,9 @@ export function ComplexTaskDesigner() {
     setInspectorTab(tab);
   };
 
-  const closeInspectorPanel = ({ clearSelection = false }: { clearSelection?: boolean } = {}) => {
+  const closeInspectorPanel = ({
+    clearSelection = false,
+  }: { clearSelection?: boolean } = {}) => {
     setInspectorOpen(false);
     if (clearSelection) {
       setSelectedNodeId(null);
@@ -457,7 +508,11 @@ export function ComplexTaskDesigner() {
   const toggleSettingsPanel = () => {
     setSettingsOpen((current) => {
       const willOpen = !current;
-      if (willOpen && typeof window !== "undefined" && window.innerWidth < 1024) {
+      if (
+        willOpen &&
+        typeof window !== "undefined" &&
+        window.innerWidth < 1024
+      ) {
         setInspectorOpen(false);
         setPreviewOpen(false);
       }
@@ -468,7 +523,11 @@ export function ComplexTaskDesigner() {
   const toggleInspectorPanel = () => {
     setInspectorOpen((current) => {
       const willOpen = !current;
-      if (willOpen && typeof window !== "undefined" && window.innerWidth < 1024) {
+      if (
+        willOpen &&
+        typeof window !== "undefined" &&
+        window.innerWidth < 1024
+      ) {
         setSettingsOpen(false);
         setPreviewOpen(false);
       }
@@ -479,7 +538,11 @@ export function ComplexTaskDesigner() {
   const togglePreviewPanel = () => {
     setPreviewOpen((current) => {
       const willOpen = !current;
-      if (willOpen && typeof window !== "undefined" && window.innerWidth < 1024) {
+      if (
+        willOpen &&
+        typeof window !== "undefined" &&
+        window.innerWidth < 1024
+      ) {
         setSettingsOpen(false);
         setInspectorOpen(false);
       }
@@ -504,13 +567,17 @@ export function ComplexTaskDesigner() {
   });
 
   const availableAgents = (agentsData?.data ?? []).filter((agent) =>
-    isAgentAvailableStatus(agent.status)
+    isAgentAvailableStatus(agent.status),
   );
-  const selectedConnection = connections.find((connection) => connection.name === connectionName);
-  const selectedDeviceProfile = selectedConnection?.device_profile?.trim() || "";
+  const selectedConnection = connections.find(
+    (connection) => connection.name === connectionName,
+  );
+  const selectedDeviceProfile =
+    selectedConnection?.device_profile?.trim() || "";
 
   useEffect(() => {
-    const initialX = typeof window !== "undefined" && window.innerWidth < 640 ? 260 : 320;
+    const initialX =
+      typeof window !== "undefined" && window.innerWidth < 640 ? 260 : 320;
     const initialContentNode =
       mode === "tx_workflow"
         ? createWorkflowNode(defaultWorkflowBlock(), initialX)
@@ -540,14 +607,16 @@ export function ComplexTaskDesigner() {
           setConnections(result.data.connections);
         } else if (!result.success) {
           toast.error(
-            td("fetchConnectionsFailed", { error: result.error ?? tc("unknownError") })
+            td("fetchConnectionsFailed", {
+              error: result.error ?? tc("unknownError"),
+            }),
           );
         }
       } catch (error) {
         toast.error(
           td("fetchConnectionsFailed", {
             error: error instanceof Error ? error.message : tc("unknownError"),
-          })
+          }),
         );
       } finally {
         setLoadingConnections(false);
@@ -579,7 +648,7 @@ export function ComplexTaskDesigner() {
           name: selectedDeviceProfile,
           default_mode: selectedConnection.default_mode,
           modes: selectedConnection.available_modes,
-        })
+        }),
       );
       setProfileModesError(null);
       setLoadingProfileModes(false);
@@ -595,7 +664,7 @@ export function ComplexTaskDesigner() {
       try {
         const result = await apiClient.getAgentDeviceProfileModes(
           agentId,
-          selectedDeviceProfile
+          selectedDeviceProfile,
         );
 
         if (cancelled) {
@@ -615,7 +684,7 @@ export function ComplexTaskDesigner() {
 
         setProfileModes(null);
         setProfileModesError(
-          error instanceof Error ? error.message : tc("unknownError")
+          error instanceof Error ? error.message : tc("unknownError"),
         );
       } finally {
         if (!cancelled) {
@@ -646,7 +715,7 @@ export function ComplexTaskDesigner() {
     Array.isArray(profileModes?.modes) &&
     profileModes.modes.length > 0;
   const workflowModeOptions = workflowModeSelectionSupported
-    ? profileModes?.modes ?? []
+    ? (profileModes?.modes ?? [])
     : [];
   const workflowModeHint = !connectionName
     ? tf("profileModeSelectConnectionHint")
@@ -682,9 +751,7 @@ export function ComplexTaskDesigner() {
   const workflowFormData: TxWorkflowFormData = {
     name: workflowName,
     failFast: workflowFailFast,
-    blocks: orderedNodes
-      .filter(isWorkflowNode)
-      .map((node) => node.data.config),
+    blocks: orderedNodes.filter(isWorkflowNode).map((node) => node.data.config),
     rawJson: "",
     useRawJson: false,
   };
@@ -722,7 +789,7 @@ export function ComplexTaskDesigner() {
   }
 
   const updateSelectedWorkflowNode = (
-    updater: (current: TxWorkflowBlockFormData) => TxWorkflowBlockFormData
+    updater: (current: TxWorkflowBlockFormData) => TxWorkflowBlockFormData,
   ) => {
     if (!selectedNodeId) {
       return;
@@ -741,12 +808,12 @@ export function ComplexTaskDesigner() {
             config: updater(node.data.config),
           },
         };
-      })
+      }),
     );
   };
 
   const updateSelectedOrchestrateNode = (
-    updater: (current: OrchestrateStageFormData) => OrchestrateStageFormData
+    updater: (current: OrchestrateStageFormData) => OrchestrateStageFormData,
   ) => {
     if (!selectedNodeId) {
       return;
@@ -754,7 +821,10 @@ export function ComplexTaskDesigner() {
 
     setNodes((current) =>
       current.map((node) => {
-        if (node.id !== selectedNodeId || node.data.kind !== "orchestrate_stage") {
+        if (
+          node.id !== selectedNodeId ||
+          node.data.kind !== "orchestrate_stage"
+        ) {
           return node;
         }
 
@@ -765,19 +835,24 @@ export function ComplexTaskDesigner() {
             config: updater(node.data.config),
           },
         };
-      })
+      }),
     );
   };
 
   const handleConnect = (connection: Connection) => {
-    if (!connection.source || !connection.target || connection.target === START_NODE_ID) {
+    if (
+      !connection.source ||
+      !connection.target ||
+      connection.target === START_NODE_ID
+    ) {
       return;
     }
 
     setEdges((current) => {
       const filtered = current.filter(
         (edge) =>
-          edge.source !== connection.source && edge.target !== connection.target
+          edge.source !== connection.source &&
+          edge.target !== connection.target,
       );
 
       return addEdge(
@@ -788,7 +863,7 @@ export function ComplexTaskDesigner() {
             type: MarkerType.ArrowClosed,
           },
         },
-        filtered
+        filtered,
       );
     });
   };
@@ -800,7 +875,8 @@ export function ComplexTaskDesigner() {
         : createOrchestrateNode(defaultOrchestrateStage(), nextNodeX(nodes));
 
     const ordered = getOrderedContentNodes(nodes, edges);
-    const sourceId = ordered.length > 0 ? ordered[ordered.length - 1].id : START_NODE_ID;
+    const sourceId =
+      ordered.length > 0 ? ordered[ordered.length - 1].id : START_NODE_ID;
 
     setNodes((current) => [...current, newNode]);
     setEdges((current) => [...current, createLinearEdge(sourceId, newNode.id)]);
@@ -831,7 +907,8 @@ export function ComplexTaskDesigner() {
     setNodes((current) => current.filter((node) => node.id !== selectedNodeId));
     setEdges((current) => {
       const filtered = current.filter(
-        (edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId
+        (edge) =>
+          edge.source !== selectedNodeId && edge.target !== selectedNodeId,
       );
 
       if (incoming && outgoing && incoming.source !== outgoing.target) {
@@ -852,9 +929,15 @@ export function ComplexTaskDesigner() {
 
     const x = nextNodeX(nodes);
     const newNode = isWorkflowNode(selectedNode)
-      ? createWorkflowNode(cloneWorkflowBlockConfig(selectedNode.data.config), x)
+      ? createWorkflowNode(
+          cloneWorkflowBlockConfig(selectedNode.data.config),
+          x,
+        )
       : isOrchestrateNode(selectedNode)
-        ? createOrchestrateNode(cloneOrchestrateStageConfig(selectedNode.data.config), x)
+        ? createOrchestrateNode(
+            cloneOrchestrateStageConfig(selectedNode.data.config),
+            x,
+          )
         : null;
 
     if (!newNode) {
@@ -862,7 +945,8 @@ export function ComplexTaskDesigner() {
     }
 
     const ordered = getOrderedContentNodes(nodes, edges);
-    const sourceId = ordered.length > 0 ? ordered[ordered.length - 1].id : START_NODE_ID;
+    const sourceId =
+      ordered.length > 0 ? ordered[ordered.length - 1].id : START_NODE_ID;
 
     setNodes((current) => [...current, newNode]);
     setEdges((current) => [...current, createLinearEdge(sourceId, newNode.id)]);
@@ -898,26 +982,30 @@ export function ComplexTaskDesigner() {
         type: mode,
         agent_id: agentId,
         connection:
-          mode === "tx_workflow" ? { connection_name: connectionName } : undefined,
+          mode === "tx_workflow"
+            ? { connection_name: connectionName }
+            : undefined,
         payload: previewPayload,
         dry_run: dryRun || undefined,
-        record_level: recordLevel !== "Off" ? recordLevel : undefined,
+        record_level: recordLevel,
       });
 
       if (result.success) {
         toast.success(
-          tp("dispatchSuccess", { name: result.data?.agent_name ?? "" })
+          tp("dispatchSuccess", { name: result.data?.agent_name ?? "" }),
         );
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
         router.push("/tasks");
       } else {
-        toast.error(td("dispatchFailed", { error: result.error ?? tc("unknownError") }));
+        toast.error(
+          td("dispatchFailed", { error: result.error ?? tc("unknownError") }),
+        );
       }
     } catch (error) {
       toast.error(
         td("dispatchFailed", {
           error: error instanceof Error ? error.message : tc("unknownError"),
-        })
+        }),
       );
     } finally {
       setDispatching(false);
@@ -960,10 +1048,16 @@ export function ComplexTaskDesigner() {
                 </div>
                 <CardDescription>{modeDescription}</CardDescription>
               </div>
-              <div className="text-xs text-muted-foreground">{tp("dragToArrange")}</div>
+              <div className="text-xs text-muted-foreground">
+                {tp("dragToArrange")}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => router.push("/tasks")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/tasks")}
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 {tp("backToTasks")}
               </Button>
@@ -1011,14 +1105,18 @@ export function ComplexTaskDesigner() {
             >
               <MiniMap pannable zoomable />
               <Controls />
-              <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} />
+              <Background
+                variant={BackgroundVariant.Dots}
+                gap={18}
+                size={1.2}
+              />
             </ReactFlow>
 
             <div className="pointer-events-none absolute inset-0 z-10">
               <div
                 className={cn(
                   "pointer-events-auto absolute left-4 top-4",
-                  canvasRightInsetClass
+                  canvasRightInsetClass,
                 )}
               >
                 <div
@@ -1031,7 +1129,9 @@ export function ComplexTaskDesigner() {
                         <Settings2 className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold">{tp("metaSettings")}</div>
+                        <div className="text-sm font-semibold">
+                          {tp("metaSettings")}
+                        </div>
                         <div className="mt-1 text-xs text-muted-foreground sm:hidden">
                           {tp("settingsCompactHint")}
                         </div>
@@ -1046,7 +1146,11 @@ export function ComplexTaskDesigner() {
                         size="icon"
                         onClick={toggleSettingsPanel}
                         className="md:hidden"
-                        aria-label={settingsOpen ? tp("collapseSettings") : tp("expandSettings")}
+                        aria-label={
+                          settingsOpen
+                            ? tp("collapseSettings")
+                            : tp("expandSettings")
+                        }
                       >
                         {settingsOpen ? (
                           <ChevronUp className="h-4 w-4" />
@@ -1065,7 +1169,9 @@ export function ComplexTaskDesigner() {
                         ) : (
                           <ChevronDown className="mr-2 h-4 w-4" />
                         )}
-                        {settingsOpen ? tp("collapseSettings") : tp("expandSettings")}
+                        {settingsOpen
+                          ? tp("collapseSettings")
+                          : tp("expandSettings")}
                       </Button>
                     </div>
                   </div>
@@ -1074,208 +1180,242 @@ export function ComplexTaskDesigner() {
                     <div className="h-[52vh] sm:h-[56vh] md:h-[400px] overflow-hidden">
                       <ScrollArea className="h-full">
                         <div className="grid gap-4 px-3 py-3 sm:gap-5 sm:px-4 sm:py-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))]">
-                        <CanvasSettingsSection
-                          title={tp("settingsGroupTargetTitle")}
-                          description={tp("settingsGroupTargetDescription")}
-                          className="h-full"
-                        >
-                          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-                            <div className="min-w-0 space-y-2">
-                              <Label>{td("targetAgent")}</Label>
-                              <Select value={agentId} onValueChange={setAgentId}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={td("selectOnlineAgent")} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {availableAgents.length === 0 ? (
-                                    <div className="p-2 text-sm text-muted-foreground">
-                                      {td("noOnlineAgents")}
+                          <CanvasSettingsSection
+                            title={tp("settingsGroupTargetTitle")}
+                            description={tp("settingsGroupTargetDescription")}
+                            className="h-full"
+                          >
+                            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+                              <div className="min-w-0 space-y-2">
+                                <Label>{td("targetAgent")}</Label>
+                                <Select
+                                  value={agentId}
+                                  onValueChange={setAgentId}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue
+                                      placeholder={td("selectOnlineAgent")}
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableAgents.length === 0 ? (
+                                      <div className="p-2 text-sm text-muted-foreground">
+                                        {td("noOnlineAgents")}
+                                      </div>
+                                    ) : (
+                                      availableAgents.map((agent) => (
+                                        <SelectItem
+                                          key={agent.id}
+                                          value={agent.id}
+                                        >
+                                          {agent.name} ·{" "}
+                                          {formatAgentReportMode(
+                                            agent.reportMode,
+                                          )}{" "}
+                                          · {agent.host}:{agent.port}
+                                        </SelectItem>
+                                      ))
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {mode === "tx_workflow" ? (
+                                <div className="space-y-2 [grid-column:1/-1]">
+                                  <Label>{td("deviceConnection")}</Label>
+                                  {loadingConnections ? (
+                                    <div className="flex h-10 items-center rounded-xl border bg-muted/40 px-3 text-sm text-muted-foreground">
+                                      {td("loadingConnections")}
                                     </div>
                                   ) : (
-                                    availableAgents.map((agent) => (
-                                      <SelectItem key={agent.id} value={agent.id}>
-                                        {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
-                                      </SelectItem>
-                                    ))
+                                    <Select
+                                      value={connectionName}
+                                      onValueChange={setConnectionName}
+                                      disabled={!agentId}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue
+                                          placeholder={
+                                            agentId
+                                              ? td("selectDeviceConnection")
+                                              : tf("selectAgentFirst")
+                                          }
+                                        />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {connections.length === 0 ? (
+                                          <div className="p-2 text-sm text-muted-foreground">
+                                            {agentId
+                                              ? td("noAvailableConnections")
+                                              : tf("selectAgentFirst")}
+                                          </div>
+                                        ) : (
+                                          connections.map((connection) => (
+                                            <SelectItem
+                                              key={connection.name}
+                                              value={connection.name}
+                                            >
+                                              {formatAgentConnectionLabel(
+                                                connection,
+                                              )}
+                                            </SelectItem>
+                                          ))
+                                        )}
+                                      </SelectContent>
+                                    </Select>
                                   )}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {mode === "tx_workflow" ? (
-                              <div className="space-y-2 [grid-column:1/-1]">
-                                <Label>{td("deviceConnection")}</Label>
-                                {loadingConnections ? (
-                                  <div className="flex h-10 items-center rounded-xl border bg-muted/40 px-3 text-sm text-muted-foreground">
-                                    {td("loadingConnections")}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground [grid-column:1/-1]">
+                                  <div className="font-medium text-foreground">
+                                    {tp("noConnectionRequired")}
                                   </div>
-                                ) : (
-                                  <Select
-                                    value={connectionName}
-                                    onValueChange={setConnectionName}
-                                    disabled={!agentId}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue
-                                        placeholder={
-                                          agentId
-                                            ? td("selectDeviceConnection")
-                                            : tf("selectAgentFirst")
-                                        }
-                                      />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {connections.length === 0 ? (
-                                        <div className="p-2 text-sm text-muted-foreground">
-                                          {agentId
-                                            ? td("noAvailableConnections")
-                                            : tf("selectAgentFirst")}
-                                        </div>
-                                      ) : (
-                                        connections.map((connection) => (
-                                          <SelectItem
-                                            key={connection.name}
-                                            value={connection.name}
-                                          >
-                                            {formatAgentConnectionLabel(connection)}
-                                          </SelectItem>
-                                        ))
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground [grid-column:1/-1]">
-                                <div className="font-medium text-foreground">
-                                  {tp("noConnectionRequired")}
+                                  <div className="mt-1">
+                                    {tp("noConnectionRequiredDescription")}
+                                  </div>
                                 </div>
-                                <div className="mt-1">
-                                  {tp("noConnectionRequiredDescription")}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </CanvasSettingsSection>
-
-                        <CanvasSettingsSection
-                          title={tp("settingsGroupRuntimeTitle")}
-                          description={tp("settingsGroupRuntimeDescription")}
-                          className="h-full"
-                        >
-                          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-                            <div className="flex min-w-0 flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                              <div className="min-w-0 space-y-0.5">
-                                <Label>{tr("dryRun")}</Label>
-                              </div>
-                              <Switch checked={dryRun} onCheckedChange={setDryRun} />
+                              )}
                             </div>
+                          </CanvasSettingsSection>
 
-                            <div className="min-w-0 space-y-2">
-                              <Label>{tp("recordLevel")}</Label>
-                              <Select
-                                value={recordLevel}
-                                onValueChange={(value) => setRecordLevel(value as RecordLevel)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Off">{tp("recordLevelOff")}</SelectItem>
-                                  <SelectItem value="KeyEventsOnly">
-                                    {tp("recordLevelKeyEvents")}
-                                  </SelectItem>
-                                  <SelectItem value="Full">{tp("recordLevelFull")}</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </CanvasSettingsSection>
-
-                        <CanvasSettingsSection
-                          title={tp("settingsGroupMetadataTitle")}
-                          description={tp("settingsGroupMetadataDescription")}
-                          className="[grid-column:1/-1]"
-                        >
-                          {mode === "tx_workflow" ? (
-                            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))]">
-                              <div className="space-y-2">
-                                <Label>{tf("workflowName")}</Label>
-                                <Input
-                                  value={workflowName}
-                                  onChange={(e) => setWorkflowName(e.target.value)}
-                                  placeholder={tf("workflowNamePlaceholder")}
-                                />
-                              </div>
-                              <div className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="space-y-0.5">
-                                  <Label>{tf("workflowFailFast")}</Label>
-                                  <p className="text-xs text-muted-foreground">
-                                    {tf("workflowFailFastHint")}
-                                  </p>
+                          <CanvasSettingsSection
+                            title={tp("settingsGroupRuntimeTitle")}
+                            description={tp("settingsGroupRuntimeDescription")}
+                            className="h-full"
+                          >
+                            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+                              <div className="flex min-w-0 flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0 space-y-0.5">
+                                  <Label>{tr("dryRun")}</Label>
                                 </div>
                                 <Switch
-                                  checked={workflowFailFast}
-                                  onCheckedChange={setWorkflowFailFast}
+                                  checked={dryRun}
+                                  onCheckedChange={setDryRun}
                                 />
                               </div>
+
+                              <div className="min-w-0 space-y-2">
+                                <Label>{tp("recordLevel")}</Label>
+                                <Select
+                                  value={recordLevel}
+                                  onValueChange={(value) =>
+                                    setRecordLevel(value as RecordLevel)
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="KeyEventsOnly">
+                                      {tp("recordLevelKeyEvents")}
+                                    </SelectItem>
+                                    <SelectItem value="Full">
+                                      {tp("recordLevelFull")}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
-                            ) : (
-                            <div className="space-y-4">
+                          </CanvasSettingsSection>
+
+                          <CanvasSettingsSection
+                            title={tp("settingsGroupMetadataTitle")}
+                            description={tp("settingsGroupMetadataDescription")}
+                            className="[grid-column:1/-1]"
+                          >
+                            {mode === "tx_workflow" ? (
                               <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))]">
                                 <div className="space-y-2">
-                                  <Label>{tf("planNameLabel")}</Label>
+                                  <Label>{tf("workflowName")}</Label>
                                   <Input
-                                    value={planName}
-                                    onChange={(e) => setPlanName(e.target.value)}
-                                    placeholder={tf("planNamePlaceholder")}
+                                    value={workflowName}
+                                    onChange={(e) =>
+                                      setWorkflowName(e.target.value)
+                                    }
+                                    placeholder={tf("workflowNamePlaceholder")}
                                   />
                                 </div>
                                 <div className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                   <div className="space-y-0.5">
-                                    <Label>{tf("planFailFast")}</Label>
+                                    <Label>{tf("workflowFailFast")}</Label>
                                     <p className="text-xs text-muted-foreground">
-                                      {tf("planFailFastHint")}
+                                      {tf("workflowFailFastHint")}
                                     </p>
                                   </div>
                                   <Switch
-                                    checked={planFailFast}
-                                    onCheckedChange={setPlanFailFast}
+                                    checked={workflowFailFast}
+                                    onCheckedChange={setWorkflowFailFast}
                                   />
                                 </div>
                               </div>
+                            ) : (
+                              <div className="space-y-4">
+                                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))]">
+                                  <div className="space-y-2">
+                                    <Label>{tf("planNameLabel")}</Label>
+                                    <Input
+                                      value={planName}
+                                      onChange={(e) =>
+                                        setPlanName(e.target.value)
+                                      }
+                                      placeholder={tf("planNamePlaceholder")}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="space-y-0.5">
+                                      <Label>{tf("planFailFast")}</Label>
+                                      <p className="text-xs text-muted-foreground">
+                                        {tf("planFailFastHint")}
+                                      </p>
+                                    </div>
+                                    <Switch
+                                      checked={planFailFast}
+                                      onCheckedChange={setPlanFailFast}
+                                    />
+                                  </div>
+                                </div>
 
-                              <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-                                <div className="space-y-2">
-                                  <Label>{tf("inventoryFile")}</Label>
-                                  <Input
-                                    value={inventoryFile}
-                                    onChange={(e) => setInventoryFile(e.target.value)}
-                                    placeholder={tf("inventoryFilePlaceholder")}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>{tf("baseDir")}</Label>
-                                  <Input
-                                    value={baseDir}
-                                    onChange={(e) => setBaseDir(e.target.value)}
-                                    placeholder={tf("baseDirPlaceholder")}
-                                  />
-                                </div>
-                                <div className="space-y-2 [grid-column:1/-1]">
-                                  <Label>{tf("inventoryJson")}</Label>
-                                  <Textarea
-                                    className="min-h-[120px] font-mono text-sm"
-                                    value={inventoryJson}
-                                    onChange={(e) => setInventoryJson(e.target.value)}
-                                    placeholder={tf("inventoryJsonPlaceholder")}
-                                  />
+                                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+                                  <div className="space-y-2">
+                                    <Label>{tf("inventoryFile")}</Label>
+                                    <Input
+                                      value={inventoryFile}
+                                      onChange={(e) =>
+                                        setInventoryFile(e.target.value)
+                                      }
+                                      placeholder={tf(
+                                        "inventoryFilePlaceholder",
+                                      )}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>{tf("baseDir")}</Label>
+                                    <Input
+                                      value={baseDir}
+                                      onChange={(e) =>
+                                        setBaseDir(e.target.value)
+                                      }
+                                      placeholder={tf("baseDirPlaceholder")}
+                                    />
+                                  </div>
+                                  <div className="space-y-2 [grid-column:1/-1]">
+                                    <Label>{tf("inventoryJson")}</Label>
+                                    <Textarea
+                                      className="min-h-[120px] font-mono text-sm"
+                                      value={inventoryJson}
+                                      onChange={(e) =>
+                                        setInventoryJson(e.target.value)
+                                      }
+                                      placeholder={tf(
+                                        "inventoryJsonPlaceholder",
+                                      )}
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </CanvasSettingsSection>
-                      </div>
+                            )}
+                          </CanvasSettingsSection>
+                        </div>
                       </ScrollArea>
                     </div>
                   )}
@@ -1306,7 +1446,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={handleDuplicateSelectedNode}
-                    disabled={!selectedNode || selectedNode.id === START_NODE_ID}
+                    disabled={
+                      !selectedNode || selectedNode.id === START_NODE_ID
+                    }
                     aria-label={tp("duplicateNode")}
                   >
                     <Copy className="h-4 w-4" />
@@ -1317,7 +1459,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={handleDeleteSelectedNode}
-                    disabled={!selectedNode || selectedNode.id === START_NODE_ID}
+                    disabled={
+                      !selectedNode || selectedNode.id === START_NODE_ID
+                    }
                     aria-label={tp("deleteNode")}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1330,7 +1474,11 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={toggleSettingsPanel}
-                    aria-label={settingsOpen ? tp("collapseSettings") : tp("expandSettings")}
+                    aria-label={
+                      settingsOpen
+                        ? tp("collapseSettings")
+                        : tp("expandSettings")
+                    }
                   >
                     <Settings2 className="h-4 w-4" />
                   </Button>
@@ -1340,9 +1488,18 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={toggleInspectorPanel}
-                    aria-label={inspectorOpen ? tp("collapseInspector") : tp("expandInspector")}
+                    aria-label={
+                      inspectorOpen
+                        ? tp("collapseInspector")
+                        : tp("expandInspector")
+                    }
                   >
-                    <ChevronLeft className={cn("h-4 w-4 transition-transform", inspectorOpen && "rotate-180")} />
+                    <ChevronLeft
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        inspectorOpen && "rotate-180",
+                      )}
+                    />
                   </Button>
 
                   <Button
@@ -1350,7 +1507,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={togglePreviewPanel}
-                    aria-label={previewOpen ? tp("collapsePreview") : tp("expandPreview")}
+                    aria-label={
+                      previewOpen ? tp("collapsePreview") : tp("expandPreview")
+                    }
                   >
                     <FileCode2 className="h-4 w-4" />
                   </Button>
@@ -1381,7 +1540,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={handleDuplicateSelectedNode}
-                    disabled={!selectedNode || selectedNode.id === START_NODE_ID}
+                    disabled={
+                      !selectedNode || selectedNode.id === START_NODE_ID
+                    }
                     aria-label={tp("duplicateNode")}
                   >
                     <Copy className="h-4 w-4" />
@@ -1392,7 +1553,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={handleDeleteSelectedNode}
-                    disabled={!selectedNode || selectedNode.id === START_NODE_ID}
+                    disabled={
+                      !selectedNode || selectedNode.id === START_NODE_ID
+                    }
                     aria-label={tp("deleteNode")}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1405,7 +1568,11 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={toggleSettingsPanel}
-                    aria-label={settingsOpen ? tp("collapseSettings") : tp("expandSettings")}
+                    aria-label={
+                      settingsOpen
+                        ? tp("collapseSettings")
+                        : tp("expandSettings")
+                    }
                   >
                     <Settings2 className="h-4 w-4" />
                   </Button>
@@ -1415,9 +1582,18 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={toggleInspectorPanel}
-                    aria-label={inspectorOpen ? tp("collapseInspector") : tp("expandInspector")}
+                    aria-label={
+                      inspectorOpen
+                        ? tp("collapseInspector")
+                        : tp("expandInspector")
+                    }
                   >
-                    <ChevronLeft className={cn("h-4 w-4 transition-transform", inspectorOpen && "rotate-180")} />
+                    <ChevronLeft
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        inspectorOpen && "rotate-180",
+                      )}
+                    />
                   </Button>
 
                   <Button
@@ -1425,7 +1601,9 @@ export function ComplexTaskDesigner() {
                     size="icon"
                     className="h-9 w-9 rounded-full"
                     onClick={togglePreviewPanel}
-                    aria-label={previewOpen ? tp("collapsePreview") : tp("expandPreview")}
+                    aria-label={
+                      previewOpen ? tp("collapsePreview") : tp("expandPreview")
+                    }
                   >
                     <FileCode2 className="h-4 w-4" />
                   </Button>
@@ -1440,7 +1618,9 @@ export function ComplexTaskDesigner() {
                   >
                     <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
                       <div>
-                        <div className="text-lg font-semibold">{tp("preview")}</div>
+                        <div className="text-lg font-semibold">
+                          {tp("preview")}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {tp("previewDescription")}
                         </div>
@@ -1481,7 +1661,8 @@ export function ComplexTaskDesigner() {
                 className={cn(
                   "pointer-events-auto absolute bottom-4 right-4 top-4 w-[calc(100%-2rem)]",
                   "max-w-[280px] sm:max-w-[320px] lg:max-w-[360px]",
-                  !inspectorOpen && "hidden lg:block lg:w-auto lg:max-w-none lg:top-24 lg:bottom-auto"
+                  !inspectorOpen &&
+                    "hidden lg:block lg:w-auto lg:max-w-none lg:top-24 lg:bottom-auto",
                 )}
               >
                 {inspectorOpen ? (
@@ -1491,7 +1672,9 @@ export function ComplexTaskDesigner() {
                   >
                     <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
                       <div>
-                        <div className="text-sm font-semibold">{tp("inspector")}</div>
+                        <div className="text-sm font-semibold">
+                          {tp("inspector")}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {tp("inspectorDescription")}
                         </div>
@@ -1503,14 +1686,19 @@ export function ComplexTaskDesigner() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                disabled={!selectedNodeId || selectedNodeId === START_NODE_ID}
+                                disabled={
+                                  !selectedNodeId ||
+                                  selectedNodeId === START_NODE_ID
+                                }
                                 onClick={handleDeleteSelectedNode}
                                 aria-label={tp("deleteNode")}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="left">{tp("deleteNode")}</TooltipContent>
+                            <TooltipContent side="left">
+                              {tp("deleteNode")}
+                            </TooltipContent>
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1533,14 +1721,18 @@ export function ComplexTaskDesigner() {
 
                     <div className="flex gap-2 border-b px-4 py-2">
                       <Button
-                        variant={inspectorTab === "config" ? "secondary" : "ghost"}
+                        variant={
+                          inspectorTab === "config" ? "secondary" : "ghost"
+                        }
                         size="sm"
                         onClick={() => setInspectorTab("config")}
                       >
                         {tp("inspectorConfigTab")}
                       </Button>
                       <Button
-                        variant={inspectorTab === "summary" ? "secondary" : "ghost"}
+                        variant={
+                          inspectorTab === "summary" ? "secondary" : "ghost"
+                        }
                         size="sm"
                         onClick={() => setInspectorTab("summary")}
                       >
@@ -1564,7 +1756,9 @@ export function ComplexTaskDesigner() {
                         ) : selectedNode && isWorkflowNode(selectedNode) ? (
                           <WorkflowBlockInspector
                             value={selectedNode.data.config}
-                            onChange={(next) => updateSelectedWorkflowNode(() => next)}
+                            onChange={(next) =>
+                              updateSelectedWorkflowNode(() => next)
+                            }
                             availableModes={workflowModeOptions}
                             modeHint={workflowModeHint}
                             modeDisabled={!workflowModeSelectionSupported}
@@ -1573,7 +1767,9 @@ export function ComplexTaskDesigner() {
                         ) : selectedNode && isOrchestrateNode(selectedNode) ? (
                           <OrchestrateStageInspector
                             value={selectedNode.data.config}
-                            onChange={(next) => updateSelectedOrchestrateNode(() => next)}
+                            onChange={(next) =>
+                              updateSelectedOrchestrateNode(() => next)
+                            }
                             modeHint={tf("orchestrateActionProfileModeHint")}
                           />
                         ) : null}
@@ -1589,14 +1785,14 @@ export function ComplexTaskDesigner() {
                       >
                         <Tooltip>
                           <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openInspectorPanel(inspectorTab)}
-                                aria-label={tp("expandInspector")}
-                              >
-                                <ChevronLeft className="h-4 w-4" />
-                              </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openInspectorPanel(inspectorTab)}
+                              aria-label={tp("expandInspector")}
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent side="left">
                             {tp("expandInspector")}
@@ -1644,7 +1840,9 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
   if (isWorkflowNode(node)) {
     const config = node.data.config;
     const commandList = config.steps
-      .map((step, index) => `${index + 1}. [${step.mode}] ${step.command || "-"}`)
+      .map(
+        (step, index) => `${index + 1}. [${step.mode}] ${step.command || "-"}`,
+      )
       .join("\n");
 
     return (
@@ -1761,7 +1959,9 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
         </div>
 
         <div className="space-y-2">
-          <div className="text-sm font-semibold">{tp("summaryActionPayload")}</div>
+          <div className="text-sm font-semibold">
+            {tp("summaryActionPayload")}
+          </div>
           <Textarea
             className="min-h-[220px] font-mono text-sm"
             readOnly
@@ -1798,12 +1998,12 @@ function WorkflowBlockInspector({
 
   const updateStep = (
     index: number,
-    patch: Partial<TxWorkflowStepFormData>
+    patch: Partial<TxWorkflowStepFormData>,
   ) => {
     onChange({
       ...value,
       steps: value.steps.map((step, stepIndex) =>
-        stepIndex === index ? { ...step, ...patch } : step
+        stepIndex === index ? { ...step, ...patch } : step,
       ),
     });
   };
@@ -1849,7 +2049,9 @@ function WorkflowBlockInspector({
           </div>
           <Switch
             checked={value.failFast}
-            onCheckedChange={(checked) => onChange({ ...value, failFast: checked })}
+            onCheckedChange={(checked) =>
+              onChange({ ...value, failFast: checked })
+            }
           />
         </div>
       </div>
@@ -1869,7 +2071,9 @@ function WorkflowBlockInspector({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="per_step">{tf("rollbackPolicyPerStep")}</SelectItem>
+            <SelectItem value="per_step">
+              {tf("rollbackPolicyPerStep")}
+            </SelectItem>
             <SelectItem value="whole_resource">
               {tf("rollbackPolicyWholeResource")}
             </SelectItem>
@@ -1899,7 +2103,9 @@ function WorkflowBlockInspector({
                 <SelectContent>
                   {selectableModes.map((mode) => (
                     <SelectItem key={mode} value={mode}>
-                      {mode === AUTO_PROFILE_MODE ? tf("profileModeAuto") : mode}
+                      {mode === AUTO_PROFILE_MODE
+                        ? tf("profileModeAuto")
+                        : mode}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1987,7 +2193,9 @@ function WorkflowBlockInspector({
                 onClick={() =>
                   onChange({
                     ...value,
-                    steps: value.steps.filter((_, stepIndex) => stepIndex !== index),
+                    steps: value.steps.filter(
+                      (_, stepIndex) => stepIndex !== index,
+                    ),
                   })
                 }
                 disabled={value.steps.length === 1}
@@ -2012,7 +2220,9 @@ function WorkflowBlockInspector({
                   <SelectContent>
                     {selectableModes.map((mode) => (
                       <SelectItem key={mode} value={mode}>
-                        {mode === AUTO_PROFILE_MODE ? tf("profileModeAuto") : mode}
+                        {mode === AUTO_PROFILE_MODE
+                          ? tf("profileModeAuto")
+                          : mode}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2123,7 +2333,9 @@ function OrchestrateStageInspector({
           <Input
             inputMode="numeric"
             value={value.maxParallel}
-            onChange={(e) => onChange({ ...value, maxParallel: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...value, maxParallel: e.target.value })
+            }
             placeholder={tf("maxParallelPlaceholder")}
           />
         </div>
@@ -2132,11 +2344,15 @@ function OrchestrateStageInspector({
       <div className="flex items-center justify-between rounded-xl border px-4 py-3">
         <div className="space-y-0.5">
           <Label>{tf("stageFailFast")}</Label>
-          <p className="text-xs text-muted-foreground">{tf("stageFailFastHint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {tf("stageFailFastHint")}
+          </p>
         </div>
         <Switch
           checked={value.failFast}
-          onCheckedChange={(checked) => onChange({ ...value, failFast: checked })}
+          onCheckedChange={(checked) =>
+            onChange({ ...value, failFast: checked })
+          }
         />
       </div>
 
@@ -2170,14 +2386,18 @@ function OrchestrateStageInspector({
               actionKind: next as OrchestrationActionKind,
               actionJson:
                 next === "tx_workflow"
-                  ? JSON.stringify({ workflow_file: "./core-vlan-workflow.json" }, null, 2)
+                  ? JSON.stringify(
+                      { workflow_file: "./core-vlan-workflow.json" },
+                      null,
+                      2,
+                    )
                   : JSON.stringify(
                       {
                         name: "stage-change",
                         commands: ["show version"],
                       },
                       null,
-                      2
+                      2,
                     ),
             })
           }
@@ -2187,7 +2407,9 @@ function OrchestrateStageInspector({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="tx_block">{tf("actionKindTxBlock")}</SelectItem>
-            <SelectItem value="tx_workflow">{tf("actionKindTxWorkflow")}</SelectItem>
+            <SelectItem value="tx_workflow">
+              {tf("actionKindTxWorkflow")}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

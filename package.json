@@ -9,7 +9,7 @@
     "build:vercel": "prisma migrate deploy && next build",
     "db:migrate:deploy": "prisma migrate deploy",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings=0",
     "type-check": "tsc --noEmit",
     "postinstall": "prisma generate"
   },

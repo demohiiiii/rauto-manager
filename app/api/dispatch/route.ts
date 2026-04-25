@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, DispatchRequest, DispatchType } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import {
-  dispatchToAgent,
-  isAsyncDispatchType,
-} from "@/lib/dispatch";
+import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
 import { parseInvalidProfileModeError } from "@/lib/profile-mode";
-import { getDefaultRecordLevelForType } from "@/lib/record-level";
+import {
+  getDefaultRecordLevelForType,
+  normalizeRecordLevel,
+} from "@/lib/record-level";
 import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
+import { hasTxBlockDispatchInput } from "@/lib/tx-block-serialize";
 import { isAgentAvailableStatus } from "@/lib/utils";
 
 const VALID_TYPES: DispatchType[] = [
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!body.type || !body.agent_id || !body.payload) {
       return NextResponse.json(
         { success: false, error: t("common.missingRequiredFields") },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `无效的 type: ${body.type}，支持: ${VALID_TYPES.join(", ")}`,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     if (body.type === "exec" && !body.payload.command) {
       return NextResponse.json(
         { success: false, error: "exec 类型必须提供 payload.command" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -56,15 +57,19 @@ export async function POST(request: NextRequest) {
     if (body.type === "template" && !body.payload.template) {
       return NextResponse.json(
         { success: false, error: "template 类型必须提供 payload.template" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Ensure tx_block requests include commands
-    if (body.type === "tx_block" && !Array.isArray(body.payload.commands)) {
+    if (body.type === "tx_block" && !hasTxBlockDispatchInput(body.payload)) {
       return NextResponse.json(
-        { success: false, error: "tx_block 类型必须提供 payload.commands 数组" },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            "tx_block 类型必须提供非空 payload.commands、payload.template 或 payload.template_content",
+        },
+        { status: 400 },
       );
     }
 
@@ -72,7 +77,7 @@ export async function POST(request: NextRequest) {
     if (body.type === "tx_workflow" && !body.payload.workflow) {
       return NextResponse.json(
         { success: false, error: "tx_workflow 类型必须提供 payload.workflow" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (body.type === "orchestrate" && !body.payload.plan) {
       return NextResponse.json(
         { success: false, error: "orchestrate 类型必须提供 payload.plan" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -92,7 +97,7 @@ export async function POST(request: NextRequest) {
     if (!agent) {
       return NextResponse.json(
         { success: false, error: "Agent 不存在" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -102,7 +107,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Agent 当前状态为 ${agent.status}，无法下发任务`,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -110,15 +115,15 @@ export async function POST(request: NextRequest) {
     const typeLabel = t(`tasks.dispatchType.${body.type}`);
     const taskName = `[${typeLabel}] ${summarizePayload(body)}`;
     const asyncDispatch = isAsyncDispatchType(body.type);
+    const dispatchingEventCreatedAt = new Date();
     const effectiveRecordLevel =
-      body.record_level ?? getDefaultRecordLevelForType(body.type);
+      normalizeRecordLevel(body.record_level) ??
+      getDefaultRecordLevelForType(body.type);
     const storedPayload: Record<string, unknown> = {
       ...body.payload,
       ...(body.connection ? { connection: body.connection } : {}),
       ...(body.dry_run !== undefined ? { dry_run: body.dry_run } : {}),
-      ...(effectiveRecordLevel !== "Off"
-        ? { record_level: effectiveRecordLevel }
-        : {}),
+      record_level: effectiveRecordLevel,
     };
 
     // Create the task record
@@ -144,6 +149,7 @@ export async function POST(request: NextRequest) {
           stage: "manager",
           message: t("tasks.eventDispatching", { name: agent.name }),
           progress: 0,
+          createdAt: dispatchingEventCreatedAt,
           details: {
             dispatchType: body.type,
           },
@@ -156,7 +162,7 @@ export async function POST(request: NextRequest) {
     // Build the callback URL from the current request origin
     const callbackUrl = new URL(
       "/api/agents/report-task-callback",
-      request.nextUrl.origin
+      request.nextUrl.origin,
     ).toString();
 
     try {
@@ -176,7 +182,11 @@ export async function POST(request: NextRequest) {
         recordLevel: effectiveRecordLevel,
       });
 
-      const taskStatus = dispatchResult.executionMode === "async" ? "queued" : "running";
+      const taskStatus =
+        dispatchResult.executionMode === "async" ? "queued" : "running";
+      const acceptedEventCreatedAt = new Date(
+        dispatchingEventCreatedAt.getTime() + 1,
+      );
 
       await prisma.$transaction(async (tx) => {
         if (dispatchResult.executionMode === "async") {
@@ -196,14 +206,18 @@ export async function POST(request: NextRequest) {
             taskId: task.id,
             agentId: agent.id,
             agentName: agent.name,
-            eventType: dispatchResult.executionMode === "async" ? "queued" : "dispatched",
+            eventType:
+              dispatchResult.executionMode === "async"
+                ? "queued"
+                : "dispatched",
             level: "info",
             stage: "manager",
             message:
               dispatchResult.executionMode === "async"
                 ? t("tasks.eventAccepted", { name: agent.name })
                 : t("tasks.eventDispatched", { name: agent.name }),
-            progress: dispatchResult.executionMode === "async" ? 5 : 10,
+            progress: dispatchResult.executionMode === "async" ? 0 : 10,
+            createdAt: acceptedEventCreatedAt,
             details: {
               dispatchType: body.type,
               executionMode: dispatchResult.executionMode,
@@ -240,10 +254,15 @@ export async function POST(request: NextRequest) {
         title: t("notifications.taskDispatched"),
         message: t("notifications.taskDispatchedTo", {
           name: agent.name,
-          type: t(`tasks.dispatchType.${body.type}`)
+          type: t(`tasks.dispatchType.${body.type}`),
         }),
         level: "info",
-        metadata: { taskId: task.id, agentId: agent.id, agentName: agent.name, dispatchType: body.type },
+        metadata: {
+          taskId: task.id,
+          agentId: agent.id,
+          agentName: agent.name,
+          dispatchType: body.type,
+        },
       }).catch(() => {});
 
       return NextResponse.json(response);
@@ -253,9 +272,8 @@ export async function POST(request: NextRequest) {
         dispatchError instanceof Error
           ? dispatchError.message
           : "Agent 调用失败";
-      const invalidProfileMode = parseInvalidProfileModeError(
-        dispatchErrorMessage
-      );
+      const invalidProfileMode =
+        parseInvalidProfileModeError(dispatchErrorMessage);
       const normalizedDispatchErrorMessage = invalidProfileMode
         ? t("dialogs.invalidProfileMode", {
             mode: invalidProfileMode.requestedMode,
@@ -302,7 +320,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: normalizedDispatchErrorMessage,
         },
-        { status: invalidProfileMode ? 400 : 502 }
+        { status: invalidProfileMode ? 400 : 502 },
       );
     }
   } catch (error) {

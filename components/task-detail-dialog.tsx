@@ -54,12 +54,14 @@ const STATUS_CONFIG: Record<
   pending: {
     labelKey: "pending",
     icon: Clock,
-    className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    className:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
   },
   queued: {
     labelKey: "queued",
     icon: Clock,
-    className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   },
   running: {
     labelKey: "running",
@@ -152,17 +154,19 @@ function ExecutionHistoryTable({
   history.forEach((h) => {
     try {
       const parsed = JSON.parse(h.output);
-      collectRecordingJsonlStrings(parsed).forEach((recordingJsonl, recordingIndex) => {
-        const entries = parseRecordingJsonl(recordingJsonl);
-        entries.forEach((entry, idx) => {
-          allEntries.push({
-            id: `${h.id}-${recordingIndex}-${idx}`,
-            entry,
-            historyId: h.id,
-            createdAt: h.createdAt,
+      collectRecordingJsonlStrings(parsed).forEach(
+        (recordingJsonl, recordingIndex) => {
+          const entries = parseRecordingJsonl(recordingJsonl);
+          entries.forEach((entry, idx) => {
+            allEntries.push({
+              id: `${h.id}-${recordingIndex}-${idx}`,
+              entry,
+              historyId: h.id,
+              createdAt: h.createdAt,
+            });
           });
-        });
-      });
+        },
+      );
     } catch {
       // Ignore malformed recording payloads
     }
@@ -297,8 +301,64 @@ function ExecutionHistoryTable({
   );
 }
 
-function getLatestEvent(events: TaskExecutionEvent[]): TaskExecutionEvent | null {
+function getLatestEvent(
+  events: TaskExecutionEvent[],
+): TaskExecutionEvent | null {
   return events.length > 0 ? events[events.length - 1] : null;
+}
+
+function getEventLifecycleOrder(event: TaskExecutionEvent): number {
+  if (event.stage === "manager" && event.eventType === "dispatching") {
+    return 10;
+  }
+
+  if (
+    event.stage === "manager" &&
+    (event.eventType === "queued" || event.eventType === "dispatched")
+  ) {
+    return 20;
+  }
+
+  if (event.eventType === "started") {
+    return 30;
+  }
+
+  if (event.eventType === "progress" || event.eventType === "log") {
+    return 40;
+  }
+
+  if (event.eventType === "completed" || event.eventType === "failed") {
+    return event.stage === "callback" ? 60 : 50;
+  }
+
+  return 45;
+}
+
+function getEventTimestamp(event: TaskExecutionEvent): number {
+  const timestamp = new Date(event.createdAt).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function sortTaskExecutionEvents(
+  events: TaskExecutionEvent[],
+): TaskExecutionEvent[] {
+  return [...events].sort((left, right) => {
+    const orderDifference =
+      getEventLifecycleOrder(left) - getEventLifecycleOrder(right);
+
+    if (orderDifference !== 0) {
+      return orderDifference;
+    }
+
+    const timestampDifference =
+      getEventTimestamp(left) - getEventTimestamp(right);
+
+    if (timestampDifference !== 0) {
+      return timestampDifference;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -328,11 +388,16 @@ function containsRecordingJsonl(value: unknown): boolean {
   }
 
   const recordingJsonl = objectValue.recording_jsonl;
-  if (typeof recordingJsonl === "string" && parseRecordingJsonl(recordingJsonl).length > 0) {
+  if (
+    typeof recordingJsonl === "string" &&
+    parseRecordingJsonl(recordingJsonl).length > 0
+  ) {
     return true;
   }
 
-  return Object.values(objectValue).some((item) => containsRecordingJsonl(item));
+  return Object.values(objectValue).some((item) =>
+    containsRecordingJsonl(item),
+  );
 }
 
 function collectRecordingJsonlStrings(value: unknown): string[] {
@@ -370,7 +435,7 @@ function hasHistoryCommandEchoes(history: ExecutionHistory[]): boolean {
     try {
       const parsed = JSON.parse(record.output) as Record<string, unknown>;
       return collectRecordingJsonlStrings(parsed).some(
-        (recordingJsonl) => parseRecordingJsonl(recordingJsonl).length > 0
+        (recordingJsonl) => parseRecordingJsonl(recordingJsonl).length > 0,
       );
     } catch {
       return false;
@@ -379,11 +444,15 @@ function hasHistoryCommandEchoes(history: ExecutionHistory[]): boolean {
 }
 
 function getConfiguredRecordLevel(
-  task: TaskDetailLike
-): "Off" | "KeyEventsOnly" | "Full" | null {
+  task: TaskDetailLike,
+): "legacy-off" | "KeyEventsOnly" | "Full" | null {
   const payload = asObject(task.payload);
   const value = payload?.record_level;
-  if (value === "Off" || value === "KeyEventsOnly" || value === "Full") {
+  if (value === "Off") {
+    return "legacy-off";
+  }
+
+  if (value === "KeyEventsOnly" || value === "Full") {
     return value;
   }
   return null;
@@ -405,6 +474,20 @@ function getLatestProgress(
   }
 
   return null;
+}
+
+function parseTaskResultSummary(
+  value: string | null | undefined,
+): Record<string, unknown> | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  try {
+    return asObject(JSON.parse(value));
+  } catch {
+    return null;
+  }
 }
 
 function TaskExecutionTimeline({ events }: { events: TaskExecutionEvent[] }) {
@@ -526,34 +609,50 @@ export function TaskDetailDialog({
   if (!task) return null;
 
   const detailTask = data?.data ?? toFallbackTaskDetail(task);
-  const executionEvents = detailTask.executionEvents ?? [];
+  const executionEvents = sortTaskExecutionEvents(
+    detailTask.executionEvents ?? [],
+  );
   const executionHistory = detailTask.executionHistory ?? [];
   const latestEvent = getLatestEvent(executionEvents);
   const currentProgress = getLatestProgress(detailTask, executionEvents);
+  const resultSummaryObject = parseTaskResultSummary(detailTask.resultSummary);
+  const resultSummaryCounts = asObject(resultSummaryObject?.counts);
+  const resultSummaryDetails = resultSummaryObject?.details;
+  const resultSummaryText =
+    typeof resultSummaryObject?.summary === "string"
+      ? resultSummaryObject.summary
+      : detailTask.resultSummary;
+  const resultSummaryRecordingAvailable =
+    typeof resultSummaryObject?.recording_available === "boolean"
+      ? resultSummaryObject.recording_available
+      : null;
   const configuredRecordLevel = getConfiguredRecordLevel(detailTask);
   const hasCommandEchoes =
-    containsRecordingJsonl(detailTask.result) || hasHistoryCommandEchoes(executionHistory);
-  const supportsCommandEchoHint = ["tx_block", "tx_workflow", "orchestrate"].includes(
-    detailTask.dispatchType
-  );
+    containsRecordingJsonl(detailTask.result) ||
+    hasHistoryCommandEchoes(executionHistory);
+  const supportsCommandEchoHint = [
+    "tx_block",
+    "tx_workflow",
+    "orchestrate",
+  ].includes(detailTask.dispatchType);
   const shouldShowCommandEchoHint =
     supportsCommandEchoHint &&
     ["success", "failed", "cancelled"].includes(detailTask.status) &&
     !hasCommandEchoes;
   const commandEchoHintTitle =
-    configuredRecordLevel === "Off"
+    configuredRecordLevel === "legacy-off"
       ? t("taskDetailRecordingDisabledTitle")
       : configuredRecordLevel
         ? t("taskDetailRecordingUnavailableTitle")
         : t("taskDetailRecordingUnknownTitle");
   const commandEchoHintDescription =
-    configuredRecordLevel === "Off"
+    configuredRecordLevel === "legacy-off"
       ? t("taskDetailRecordingDisabledDescription")
       : configuredRecordLevel
         ? t("taskDetailRecordingUnavailableDescription")
         : t("taskDetailRecordingUnknownDescription");
   const historyEmptyText =
-    configuredRecordLevel === "Off"
+    configuredRecordLevel === "legacy-off"
       ? t("taskDetailHistoryRecordingDisabled")
       : configuredRecordLevel
         ? t("taskDetailHistoryRecordingUnavailable")
@@ -630,7 +729,8 @@ export function TaskDetailDialog({
                   {tt("liveExecutionDescription")}
                 </p>
               </div>
-              {(detailTask.status === "queued" || detailTask.status === "running") && (
+              {(detailTask.status === "queued" ||
+                detailTask.status === "running") && (
                 <Badge variant="secondary" className="gap-1">
                   {isFetching ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -681,7 +781,9 @@ export function TaskDetailDialog({
                   />
                 </div>
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-muted-foreground">{tt("latestEvent")}</span>
+                  <span className="text-muted-foreground">
+                    {tt("latestEvent")}
+                  </span>
                   <span className="text-right font-medium">
                     {latestEvent?.message || tt("waitingForExecutionEvents")}
                   </span>
@@ -719,6 +821,78 @@ export function TaskDetailDialog({
           <Separator />
 
           <div className="space-y-2">
+            {detailTask.resultSummary && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">
+                  {t("taskDetailResultSummary")}
+                </h4>
+                <div className="rounded-lg border bg-muted/10 px-4 py-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {typeof resultSummaryObject?.operation === "string" && (
+                      <Badge variant="outline">
+                        {resultSummaryObject.operation}
+                      </Badge>
+                    )}
+                    {typeof resultSummaryObject?.outcome === "string" && (
+                      <Badge variant="secondary">
+                        {resultSummaryObject.outcome}
+                      </Badge>
+                    )}
+                  </div>
+                  {resultSummaryText && (
+                    <p className="text-sm font-medium">{resultSummaryText}</p>
+                  )}
+                  {(resultSummaryCounts ||
+                    resultSummaryRecordingAvailable !== null) && (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      {typeof resultSummaryCounts?.total === "number" && (
+                        <InfoRow label={t("taskResult.total")}>
+                          {resultSummaryCounts.total}
+                        </InfoRow>
+                      )}
+                      {typeof resultSummaryCounts?.succeeded === "number" && (
+                        <InfoRow label={t("taskResult.success")}>
+                          {resultSummaryCounts.succeeded}
+                        </InfoRow>
+                      )}
+                      {typeof resultSummaryCounts?.failed === "number" && (
+                        <InfoRow label={t("taskResult.failed")}>
+                          {resultSummaryCounts.failed}
+                        </InfoRow>
+                      )}
+                      {typeof resultSummaryCounts?.skipped === "number" && (
+                        <InfoRow label={t("taskResult.skipped")}>
+                          {resultSummaryCounts.skipped}
+                        </InfoRow>
+                      )}
+                      {resultSummaryRecordingAvailable !== null && (
+                        <InfoRow label={t("taskResult.recordingAvailable")}>
+                          {resultSummaryRecordingAvailable
+                            ? t("agentDetailManagedModeYes")
+                            : t("agentDetailManagedModeNo")}
+                        </InfoRow>
+                      )}
+                    </div>
+                  )}
+                  {(resultSummaryDetails !== undefined ||
+                    !resultSummaryObject) && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">
+                        {t("taskDetailResultSummaryRaw")}
+                      </div>
+                      <OutputBlock
+                        content={
+                          resultSummaryDetails !== undefined
+                            ? JSON.stringify(resultSummaryDetails, null, 2)
+                            : detailTask.resultSummary
+                        }
+                        maxHeight="180px"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <h4 className="text-sm font-medium">{t("taskDetailResult")}</h4>
             <ResultRenderer
               dispatchType={detailTask.dispatchType}
@@ -740,7 +914,9 @@ export function TaskDetailDialog({
             <>
               <Separator />
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">{t("taskDetailHistory")}</h4>
+                <h4 className="text-sm font-medium">
+                  {t("taskDetailHistory")}
+                </h4>
                 <ExecutionHistoryTable
                   history={executionHistory}
                   emptyText={historyEmptyText}
