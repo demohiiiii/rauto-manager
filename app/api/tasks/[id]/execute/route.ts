@@ -11,7 +11,10 @@ import { createNotification } from "@/lib/notification";
 import type { DispatchType } from "@/lib/types";
 import type { Prisma } from "@prisma/client";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import {
+  buildConnectionPayloadFromInput,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 
 /**
  * POST /api/tasks/[id]/execute
@@ -110,18 +113,12 @@ export async function POST(
       });
     });
 
-    // Build the callback URL from the current request origin
-    const callbackUrl = new URL(
-      "/api/agents/report-task-callback",
-      request.nextUrl.origin,
-    ).toString();
-
     const payload = (task.payload ?? {}) as Record<string, unknown>;
 
     // Extract connection if it exists inside the payload
-    const connection = payload.connection as
-      | Record<string, unknown>
-      | undefined;
+    const connection = buildConnectionPayloadFromInput(
+      (payload.connection as Record<string, unknown> | undefined) ?? undefined,
+    );
     const dryRun = payload.dry_run as boolean | undefined;
     const recordLevel =
       normalizeRecordLevel(payload.record_level) ??
@@ -144,7 +141,6 @@ export async function POST(
         },
         type: dispatchType,
         taskId: task.id,
-        callbackUrl,
         connection,
         payload: purePayload,
         dryRun: dryRun,

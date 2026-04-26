@@ -50,6 +50,7 @@ import {
   cn,
   formatAgentConnectionLabel,
   formatAgentReportMode,
+  buildConnectionPayloadFromInput,
 } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,8 +94,16 @@ import {
   buildOrchestratePayload,
   validateOrchestrateForm,
   type OrchestrateFormData,
+  type OrchestrateJobFormData,
   type OrchestrateStageFormData,
 } from "@/components/task-forms/orchestrate-form";
+import {
+  JsonObjectEditor,
+  JsonArrayEditor,
+  parseStructuredJsonObjectString,
+  parseStructuredJsonArrayString,
+  stringifyStructuredJsonValue,
+} from "@/components/task-forms/json-structure-editor";
 
 type ComplexDispatchType = Extract<DispatchType, "tx_workflow" | "orchestrate">;
 type RecordLevel = "KeyEventsOnly" | "Full";
@@ -159,23 +168,48 @@ function defaultWorkflowBlock(): TxWorkflowBlockFormData {
   };
 }
 
-function defaultOrchestrateStage(): OrchestrateStageFormData {
+function defaultOrchestrateActionJson(kind: OrchestrationActionKind): string {
+  if (kind === "tx_workflow") {
+    return JSON.stringify(
+      {
+        workflow_file: "./core-vlan-workflow.json",
+      },
+      null,
+      2,
+    );
+  }
+
+  return JSON.stringify(
+    {
+      name: "stage-change",
+      commands: ["show version"],
+    },
+    null,
+    2,
+  );
+}
+
+function defaultOrchestrateJob(): OrchestrateJobFormData {
   return {
     name: "",
     strategy: "serial",
     maxParallel: "",
     failFast: true,
     targetGroups: "",
+    targetTags: "",
     targetsJson: "",
     actionKind: "tx_block",
-    actionJson: JSON.stringify(
-      {
-        name: "stage-change",
-        commands: ["show version"],
-      },
-      null,
-      2,
-    ),
+    actionJson: defaultOrchestrateActionJson("tx_block"),
+  };
+}
+
+function defaultOrchestrateStage(): OrchestrateStageFormData {
+  return {
+    name: "",
+    strategy: "serial",
+    maxParallel: "",
+    failFast: true,
+    jobs: [defaultOrchestrateJob()],
   };
 }
 
@@ -193,6 +227,7 @@ function cloneOrchestrateStageConfig(
 ): OrchestrateStageFormData {
   return {
     ...config,
+    jobs: config.jobs.map((job) => ({ ...job })),
   };
 }
 
@@ -356,6 +391,12 @@ function DesignerNodeCard({
 }: NodeProps<Node<WorkflowNodeData | OrchestrateNodeData>>) {
   const t = useTranslations("designer");
   const tf = useTranslations("taskForms");
+  const stageStrategyLabel =
+    data.kind === "orchestrate_stage"
+      ? data.config.strategy === "parallel"
+        ? tf("strategyParallel")
+        : tf("strategySerial")
+      : null;
 
   const title =
     data.kind === "workflow_block"
@@ -365,11 +406,7 @@ function DesignerNodeCard({
   const summary =
     data.kind === "workflow_block"
       ? `${data.config.steps.length} ${tf("step")} / ${data.config.kind} / ${data.config.rollbackPolicy}`
-      : `${data.config.strategy} / ${data.config.actionKind} / ${
-          data.config.targetGroups.trim() || data.config.targetsJson.trim()
-            ? "targets"
-            : "unset"
-        }`;
+      : `${stageStrategyLabel} / ${t("summaryJobs")}: ${data.config.jobs.length}`;
 
   const Icon = data.kind === "workflow_block" ? FileCode2 : Network;
 
@@ -554,6 +591,11 @@ export function ComplexTaskDesigner() {
   const [workflowFailFast, setWorkflowFailFast] = useState(true);
   const [planName, setPlanName] = useState("orchestration");
   const [planFailFast, setPlanFailFast] = useState(true);
+  const [rollbackOnStageFailure, setRollbackOnStageFailure] = useState(false);
+  const [
+    rollbackCompletedStagesOnFailure,
+    setRollbackCompletedStagesOnFailure,
+  ] = useState(false);
   const [inventoryFile, setInventoryFile] = useState("");
   const [inventoryJson, setInventoryJson] = useState("");
   const [baseDir, setBaseDir] = useState("");
@@ -759,6 +801,8 @@ export function ComplexTaskDesigner() {
   const orchestrateFormData: OrchestrateFormData = {
     name: planName,
     failFast: planFailFast,
+    rollbackOnStageFailure,
+    rollbackCompletedStagesOnFailure,
     inventoryFile,
     inventoryJson,
     baseDir,
@@ -983,7 +1027,9 @@ export function ComplexTaskDesigner() {
         agent_id: agentId,
         connection:
           mode === "tx_workflow"
-            ? { connection_name: connectionName }
+            ? buildConnectionPayloadFromInput(selectedConnection, {
+                fallbackConnectionName: connectionName || undefined,
+              })
             : undefined,
         payload: previewPayload,
         dry_run: dryRun || undefined,
@@ -1123,7 +1169,7 @@ export function ComplexTaskDesigner() {
                   data-designer-panel="settings"
                   className="rounded-2xl border bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5 sm:px-4 sm:py-3">
+                  <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4 sm:py-3">
                     <div className="min-w-0 flex items-start gap-3">
                       <div className="rounded-lg bg-primary/10 p-1.5 text-primary sm:p-2">
                         <Settings2 className="h-4 w-4" />
@@ -1400,20 +1446,59 @@ export function ComplexTaskDesigner() {
                                   </div>
                                   <div className="space-y-2 [grid-column:1/-1]">
                                     <Label>{tf("inventoryJson")}</Label>
-                                    <Textarea
-                                      className="min-h-[120px] font-mono text-sm"
-                                      value={inventoryJson}
-                                      onChange={(e) =>
-                                        setInventoryJson(e.target.value)
-                                      }
-                                      placeholder={tf(
-                                        "inventoryJsonPlaceholder",
+                                    <JsonObjectEditor
+                                      value={parseStructuredJsonObjectString(
+                                        inventoryJson,
                                       )}
+                                      onChange={(next) =>
+                                        setInventoryJson(
+                                          stringifyStructuredJsonValue(next, {
+                                            blankWhenEmpty: true,
+                                          }),
+                                        )
+                                      }
                                     />
                                   </div>
                                 </div>
                               </div>
                             )}
+                          </CanvasSettingsSection>
+
+                          <CanvasSettingsSection
+                            title={tp("settingsGroupRollbackTitle")}
+                            description={tp("settingsGroupRollbackDescription")}
+                            className="[grid-column:1/-1]"
+                          >
+                            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+                              <div className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="space-y-0.5">
+                                  <Label>{tf("rollbackOnStageFailure")}</Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    {tf("rollbackOnStageFailureHint")}
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={rollbackOnStageFailure}
+                                  onCheckedChange={setRollbackOnStageFailure}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="space-y-0.5">
+                                  <Label>
+                                    {tf("rollbackCompletedStagesOnFailure")}
+                                  </Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    {tf("rollbackCompletedStagesOnFailureHint")}
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={rollbackCompletedStagesOnFailure}
+                                  onCheckedChange={
+                                    setRollbackCompletedStagesOnFailure
+                                  }
+                                />
+                              </div>
+                            </div>
                           </CanvasSettingsSection>
                         </div>
                       </ScrollArea>
@@ -1679,44 +1764,27 @@ export function ComplexTaskDesigner() {
                           {tp("inspectorDescription")}
                         </div>
                       </div>
-                      <TooltipProvider>
-                        <div className="flex items-center gap-2">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={
-                                  !selectedNodeId ||
-                                  selectedNodeId === START_NODE_ID
-                                }
-                                onClick={handleDeleteSelectedNode}
-                                aria-label={tp("deleteNode")}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="left">
-                              {tp("deleteNode")}
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => closeInspectorPanel()}
-                                aria-label={tp("collapseInspector")}
-                              >
-                                <ChevronRight className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="left">
-                              {tp("collapseInspector")}
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TooltipProvider>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={
+                            !selectedNodeId || selectedNodeId === START_NODE_ID
+                          }
+                          onClick={handleDeleteSelectedNode}
+                          aria-label={tp("deleteNode")}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => closeInspectorPanel()}
+                          aria-label={tp("collapseInspector")}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="flex gap-2 border-b px-4 py-2">
@@ -1910,6 +1978,66 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
 
   if (isOrchestrateNode(node)) {
     const config = node.data.config;
+    const allTargetGroups = Array.from(
+      new Set(
+        config.jobs.flatMap((job) =>
+          job.targetGroups
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ),
+    );
+    const allTargetTags = Array.from(
+      new Set(
+        config.jobs.flatMap((job) =>
+          job.targetTags
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ),
+    );
+    const inlineTargetJobs = config.jobs.filter((job) =>
+      job.targetsJson.trim(),
+    ).length;
+    const jobsPreview = JSON.stringify(
+      config.jobs.map((job) => {
+        const targetGroups = job.targetGroups
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const targetTags = job.targetTags
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const targets = job.targetsJson.trim()
+          ? (JSON.parse(job.targetsJson) as unknown)
+          : undefined;
+        const actionPayload = JSON.parse(job.actionJson) as Record<
+          string,
+          unknown
+        >;
+
+        return {
+          ...(job.name.trim() ? { name: job.name.trim() } : {}),
+          strategy: job.strategy,
+          ...(job.maxParallel.trim()
+            ? { max_parallel: Number(job.maxParallel) }
+            : {}),
+          fail_fast: job.failFast,
+          ...(targetGroups.length > 0 ? { target_groups: targetGroups } : {}),
+          ...(targetTags.length > 0 ? { target_tags: targetTags } : {}),
+          ...(targets !== undefined ? { targets } : {}),
+          action: {
+            kind: job.actionKind,
+            ...actionPayload,
+          },
+        };
+      }),
+      null,
+      2,
+    );
 
     return (
       <div className="space-y-4">
@@ -1938,22 +2066,26 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
               value={config.maxParallel || "-"}
             />
             <SummaryRow
-              label={tf("actionKind")}
-              value={
-                config.actionKind === "tx_workflow"
-                  ? tf("actionKindTxWorkflow")
-                  : tf("actionKindTxBlock")
-              }
+              label={tp("summaryJobs")}
+              value={String(config.jobs.length)}
             />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <SummaryRow
               label={tp("summaryTargetGroups")}
-              value={config.targetGroups.trim() || "-"}
+              value={allTargetGroups.join(", ") || "-"}
             />
             <SummaryRow
+              label={tp("summaryTargetTags")}
+              value={allTargetTags.join(", ") || "-"}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <SummaryRow
               label={tp("summaryInlineTargets")}
-              value={config.targetsJson.trim() ? tr("on") : tr("off")}
+              value={
+                inlineTargetJobs > 0 ? String(inlineTargetJobs) : tr("off")
+              }
             />
           </div>
         </div>
@@ -1965,7 +2097,7 @@ function NodeSummaryPanel({ node }: { node: DesignerNode }) {
           <Textarea
             className="min-h-[220px] font-mono text-sm"
             readOnly
-            value={config.actionJson || "-"}
+            value={jobsPreview || "-"}
           />
         </div>
       </div>
@@ -2296,6 +2428,18 @@ function OrchestrateStageInspector({
 }) {
   const tf = useTranslations("taskForms");
 
+  const updateJob = (
+    jobIndex: number,
+    patch: Partial<OrchestrateJobFormData>,
+  ) => {
+    onChange({
+      ...value,
+      jobs: value.jobs.map((job, currentJobIndex) =>
+        currentJobIndex === jobIndex ? { ...job, ...patch } : job,
+      ),
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -2303,7 +2447,7 @@ function OrchestrateStageInspector({
         <Input
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
-          placeholder={tf("stageNamePlaceholder")}
+          placeholder={tf("blockNamePlaceholder")}
         />
       </div>
 
@@ -2356,76 +2500,202 @@ function OrchestrateStageInspector({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>{tf("targetGroups")}</Label>
-        <Input
-          value={value.targetGroups}
-          onChange={(e) => onChange({ ...value, targetGroups: e.target.value })}
-          placeholder={tf("targetGroupsPlaceholder")}
-        />
-      </div>
+      <div className="space-y-3 rounded-xl border border-dashed p-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>{tf("stageJobs")}</Label>
+            <p className="text-xs text-muted-foreground">
+              {tf("stageJobsHint")}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              onChange({
+                ...value,
+                jobs: [...value.jobs, defaultOrchestrateJob()],
+              })
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {tf("addJob")}
+          </Button>
+        </div>
 
-      <div className="space-y-2">
-        <Label>{tf("targetsJson")}</Label>
-        <Textarea
-          className="min-h-[120px] font-mono text-sm"
-          value={value.targetsJson}
-          onChange={(e) => onChange({ ...value, targetsJson: e.target.value })}
-          placeholder={tf("targetsJsonPlaceholder")}
-        />
-        <p className="text-xs text-muted-foreground">{tf("targetsJsonHint")}</p>
-      </div>
-
-      <div className="space-y-2">
-        <Label>{tf("actionKind")}</Label>
-        <Select
-          value={value.actionKind}
-          onValueChange={(next) =>
-            onChange({
-              ...value,
-              actionKind: next as OrchestrationActionKind,
-              actionJson:
-                next === "tx_workflow"
-                  ? JSON.stringify(
-                      { workflow_file: "./core-vlan-workflow.json" },
-                      null,
-                      2,
-                    )
-                  : JSON.stringify(
-                      {
-                        name: "stage-change",
-                        commands: ["show version"],
-                      },
-                      null,
-                      2,
+        {value.jobs.map((job, jobIndex) => (
+          <div key={jobIndex} className="space-y-4 rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">
+                {tf("jobNumber", { number: jobIndex + 1 })}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    jobs: value.jobs.filter(
+                      (_, currentJobIndex) => currentJobIndex !== jobIndex,
                     ),
-            })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tx_block">{tf("actionKindTxBlock")}</SelectItem>
-            <SelectItem value="tx_workflow">
-              {tf("actionKindTxWorkflow")}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+                  })
+                }
+                disabled={value.jobs.length === 1}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
 
-      <div className="space-y-2">
-        <Label>{tf("actionJson")}</Label>
-        <Textarea
-          className="min-h-[180px] font-mono text-sm"
-          value={value.actionJson}
-          onChange={(e) => onChange({ ...value, actionJson: e.target.value })}
-          placeholder={tf("actionJsonPlaceholder")}
-        />
-        <p className="text-xs text-muted-foreground">{tf("actionJsonHint")}</p>
-        {modeHint ? (
-          <p className="text-xs text-muted-foreground">{modeHint}</p>
-        ) : null}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>{tf("jobName")}</Label>
+                <Input
+                  value={job.name}
+                  onChange={(e) =>
+                    updateJob(jobIndex, { name: e.target.value })
+                  }
+                  placeholder={tf("jobNamePlaceholder")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{tf("executionStrategy")}</Label>
+                <Select
+                  value={job.strategy}
+                  onValueChange={(next) =>
+                    updateJob(jobIndex, { strategy: next as StageStrategy })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="serial">
+                      {tf("strategySerial")}
+                    </SelectItem>
+                    <SelectItem value="parallel">
+                      {tf("strategyParallel")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>{tf("maxParallel")}</Label>
+                <Input
+                  inputMode="numeric"
+                  value={job.maxParallel}
+                  onChange={(e) =>
+                    updateJob(jobIndex, { maxParallel: e.target.value })
+                  }
+                  placeholder={tf("maxParallelPlaceholder")}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-xl border px-4 py-3">
+                <div className="space-y-0.5">
+                  <Label>{tf("jobFailFast")}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {tf("jobFailFastHint")}
+                  </p>
+                </div>
+                <Switch
+                  checked={job.failFast}
+                  onCheckedChange={(checked) =>
+                    updateJob(jobIndex, { failFast: checked })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>{tf("targetGroups")}</Label>
+                <Input
+                  value={job.targetGroups}
+                  onChange={(e) =>
+                    updateJob(jobIndex, { targetGroups: e.target.value })
+                  }
+                  placeholder={tf("targetGroupsPlaceholder")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{tf("targetTags")}</Label>
+                <Input
+                  value={job.targetTags}
+                  onChange={(e) =>
+                    updateJob(jobIndex, { targetTags: e.target.value })
+                  }
+                  placeholder={tf("targetTagsPlaceholder")}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{tf("targetsJson")}</Label>
+              <JsonArrayEditor
+                value={parseStructuredJsonArrayString(job.targetsJson)}
+                onChange={(next) =>
+                  updateJob(jobIndex, {
+                    targetsJson: stringifyStructuredJsonValue(next, {
+                      blankWhenEmpty: true,
+                    }),
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {tf("targetsJsonHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{tf("actionKind")}</Label>
+              <Select
+                value={job.actionKind}
+                onValueChange={(next) =>
+                  updateJob(jobIndex, {
+                    actionKind: next as OrchestrationActionKind,
+                    actionJson: defaultOrchestrateActionJson(
+                      next as OrchestrationActionKind,
+                    ),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tx_block">
+                    {tf("actionKindTxBlock")}
+                  </SelectItem>
+                  <SelectItem value="tx_workflow">
+                    {tf("actionKindTxWorkflow")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{tf("actionJson")}</Label>
+              <JsonObjectEditor
+                value={parseStructuredJsonObjectString(job.actionJson)}
+                onChange={(next) =>
+                  updateJob(jobIndex, {
+                    actionJson: stringifyStructuredJsonValue(next, {
+                      blankWhenEmpty: false,
+                    }),
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {tf("actionJsonHint")}
+              </p>
+              {modeHint ? (
+                <p className="text-xs text-muted-foreground">{modeHint}</p>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

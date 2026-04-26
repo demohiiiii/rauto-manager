@@ -8,6 +8,8 @@ import type {
   AgentOfflineInput,
   AgentRegisterInput,
   AgentReportMode,
+  TaskCallbackInput,
+  TaskExecutionEventInput,
   TaskExecutionEventLevel,
 } from "@/lib/types";
 
@@ -67,31 +69,9 @@ export interface AgentErrorReportInput {
   details_json?: string | null;
 }
 
-export interface TaskCallbackReportInput {
-  task_id: string;
-  agent_name: string;
-  status: "success" | "failed" | string;
-  started_at?: string;
-  completed_at?: string;
-  execution_time_ms?: number;
-  result?: unknown;
-  result_json?: string | null;
-  result_summary_json?: string | null;
-  error?: string | null;
-}
+export type TaskCallbackReportInput = TaskCallbackInput;
 
-export interface TaskExecutionEventReportInput {
-  task_id: string;
-  agent_name: string;
-  event_type: string;
-  message: string;
-  level?: TaskExecutionEventLevel;
-  stage?: string;
-  progress?: number;
-  details?: unknown;
-  details_json?: string | null;
-  occurred_at?: string;
-}
+export type TaskExecutionEventReportInput = TaskExecutionEventInput;
 
 interface AgentReportingTransportOptions {
   reportMode?: AgentReportMode;

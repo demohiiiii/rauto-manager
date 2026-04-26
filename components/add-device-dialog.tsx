@@ -26,7 +26,11 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { apiClient } from "@/lib/api/client";
 import { normalizeDeviceProfileModes } from "@/lib/profile-mode";
-import { formatAgentReportMode, isAgentAvailableStatus } from "@/lib/utils";
+import {
+  buildConnectionPayloadFromInput,
+  formatAgentReportMode,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 import type { DeviceProfileModes } from "@/lib/types";
 
 interface AddDeviceDialogProps {
@@ -38,13 +42,19 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
   const tc = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<"success" | "failed" | null>(null);
+  const [testResult, setTestResult] = useState<"success" | "failed" | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [deviceProfiles, setDeviceProfiles] = useState<string[]>([]);
-  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(null);
+  const [profileModes, setProfileModes] = useState<DeviceProfileModes | null>(
+    null,
+  );
   const [loadingProfileModes, setLoadingProfileModes] = useState(false);
-  const [profileModesError, setProfileModesError] = useState<string | null>(null);
+  const [profileModesError, setProfileModesError] = useState<string | null>(
+    null,
+  );
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
@@ -66,7 +76,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
   });
 
   const availableAgents = (agentsData?.data ?? []).filter((a) =>
-    isAgentAvailableStatus(a.status)
+    isAgentAvailableStatus(a.status),
   );
   // When an agent is selected, fetch its supported device profiles through the Manager proxy
   useEffect(() => {
@@ -80,16 +90,26 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
     const fetchProfiles = async () => {
       setLoadingProfiles(true);
       try {
-        const response = await fetch(`/api/agents/${formData.agentId}/device-profiles`);
+        const response = await fetch(
+          `/api/agents/${formData.agentId}/device-profiles`,
+        );
         const result = await response.json();
 
         if (result.success && result.data?.all) {
           setDeviceProfiles(result.data.all);
         } else {
-          toast.error(t("fetchDeviceProfilesFailed", { error: result.error || tc("unknownError") }));
+          toast.error(
+            t("fetchDeviceProfilesFailed", {
+              error: result.error || tc("unknownError"),
+            }),
+          );
         }
       } catch (error) {
-        toast.error(t("fetchDeviceProfilesFailed", { error: error instanceof Error ? error.message : tc("unknownError") }));
+        toast.error(
+          t("fetchDeviceProfilesFailed", {
+            error: error instanceof Error ? error.message : tc("unknownError"),
+          }),
+        );
       } finally {
         setLoadingProfiles(false);
       }
@@ -116,7 +136,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
       try {
         const result = await apiClient.getAgentDeviceProfileModes(
           formData.agentId,
-          formData.deviceProfile
+          formData.deviceProfile,
         );
 
         if (cancelled) {
@@ -136,7 +156,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
 
         setProfileModes(null);
         setProfileModesError(
-          error instanceof Error ? error.message : tc("unknownError")
+          error instanceof Error ? error.message : tc("unknownError"),
         );
       } finally {
         if (!cancelled) {
@@ -180,28 +200,30 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
   };
 
   const handleTestConnection = async () => {
-    if (!formData.agentId || !formData.host || !formData.username || !formData.deviceProfile) {
+    if (
+      !formData.agentId ||
+      !formData.host ||
+      !formData.username ||
+      !formData.deviceProfile
+    ) {
       toast.error(t("testRequiredFields"));
       return;
     }
+
+    const connectionPayload = buildConnectionPayloadFromInput(formData);
 
     setTesting(true);
     setTestResult(null);
 
     try {
-      const response = await fetch(`/api/agents/${formData.agentId}/test-connection`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          host: formData.host,
-          port: parseInt(formData.port),
-          username: formData.username,
-          password: formData.password,
-          enablePassword: formData.enablePassword || undefined,
-          deviceProfile: formData.deviceProfile,
-          sshSecurity: formData.sshSecurity,
-        }),
-      });
+      const response = await fetch(
+        `/api/agents/${formData.agentId}/test-connection`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(connectionPayload ?? {}),
+        },
+      );
 
       const result = await response.json();
 
@@ -210,45 +232,65 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
         toast.success(t("testConnectionSuccess"));
       } else {
         setTestResult("failed");
-        toast.error(t("testConnectionFailed", { error: result.error || tc("unknownError") }));
+        toast.error(
+          t("testConnectionFailed", {
+            error: result.error || tc("unknownError"),
+          }),
+        );
       }
     } catch (error) {
       setTestResult("failed");
-      toast.error(t("testConnectionFailed", { error: error instanceof Error ? error.message : tc("unknownError") }));
+      toast.error(
+        t("testConnectionFailed", {
+          error: error instanceof Error ? error.message : tc("unknownError"),
+        }),
+      );
     } finally {
       setTesting(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.agentId || !formData.host || !formData.deviceProfile || !formData.username || !formData.password) {
+    if (
+      !formData.name ||
+      !formData.agentId ||
+      !formData.host ||
+      !formData.deviceProfile ||
+      !formData.username ||
+      !formData.password
+    ) {
       toast.error(t("requiredFieldsIncludingPassword"));
       return;
     }
+
+    const connectionPayload = buildConnectionPayloadFromInput(formData, {
+      fallbackConnectionName: formData.name,
+    });
 
     setSubmitting(true);
 
     try {
       // 1. Sync to the rauto Agent through the Manager proxy first (save the connection config)
-      const saveConnectionResponse = await fetch(`/api/agents/${formData.agentId}/connections`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          host: formData.host,
-          port: parseInt(formData.port),
-          username: formData.username,
-          password: formData.password,
-          enablePassword: formData.enablePassword || undefined,
-          deviceProfile: formData.deviceProfile,
-          sshSecurity: formData.sshSecurity,
-          savePassword: true,
-        }),
-      });
+      const saveConnectionResponse = await fetch(
+        `/api/agents/${formData.agentId}/connections`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formData.name,
+            ...(connectionPayload ?? {}),
+            savePassword: true,
+          }),
+        },
+      );
 
       const saveResult = await saveConnectionResponse.json();
       if (!saveResult.success) {
-        throw new Error(t("syncToRautoFailed", { error: saveResult.error || tc("unknownError") }));
+        throw new Error(
+          t("syncToRautoFailed", {
+            error: saveResult.error || tc("unknownError"),
+          }),
+        );
       }
 
       // 2. Then persist the device in the Manager database
@@ -287,10 +329,16 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
         });
         setTestResult(null);
       } else {
-        toast.error(t("addDeviceFailed", { error: result.error ?? tc("unknownError") }));
+        toast.error(
+          t("addDeviceFailed", { error: result.error ?? tc("unknownError") }),
+        );
       }
     } catch (error) {
-      toast.error(t("addDeviceFailed", { error: error instanceof Error ? error.message : tc("unknownError") }));
+      toast.error(
+        t("addDeviceFailed", {
+          error: error instanceof Error ? error.message : tc("unknownError"),
+        }),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -305,9 +353,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
             <Plus className="h-5 w-5" />
             {t("addDeviceTitle")}
           </DialogTitle>
-          <DialogDescription>
-            {t("addDeviceDescription")}
-          </DialogDescription>
+          <DialogDescription>{t("addDeviceDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -315,17 +361,23 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
             <Label htmlFor="agent">
               {t("belongsToAgent")} <span className="text-destructive">*</span>
             </Label>
-            <Select value={formData.agentId} onValueChange={(v) => handleInputChange("agentId", v)}>
+            <Select
+              value={formData.agentId}
+              onValueChange={(v) => handleInputChange("agentId", v)}
+            >
               <SelectTrigger id="agent">
                 <SelectValue placeholder={t("selectOnlineAgent")} />
               </SelectTrigger>
               <SelectContent>
                 {availableAgents.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground">{t("noOnlineAgents")}</div>
+                  <div className="p-2 text-sm text-muted-foreground">
+                    {t("noOnlineAgents")}
+                  </div>
                 ) : (
                   availableAgents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} · {formatAgentReportMode(agent.reportMode)} · {agent.host}:{agent.port}
+                      {agent.name} · {formatAgentReportMode(agent.reportMode)} ·{" "}
+                      {agent.host}:{agent.port}
                     </SelectItem>
                   ))
                 )}
@@ -358,12 +410,20 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
               disabled={!formData.agentId || loadingProfiles}
             >
               <SelectTrigger id="profile">
-                <SelectValue placeholder={loadingProfiles ? t("loadingProfiles") : t("selectDeviceProfile")} />
+                <SelectValue
+                  placeholder={
+                    loadingProfiles
+                      ? t("loadingProfiles")
+                      : t("selectDeviceProfile")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {deviceProfiles.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">
-                    {formData.agentId ? t("noDeviceProfiles") : t("selectAgentFirst")}
+                    {formData.agentId
+                      ? t("noDeviceProfiles")
+                      : t("selectAgentFirst")}
                   </div>
                 ) : (
                   deviceProfiles.map((profile) => (
@@ -374,9 +434,7 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
                 )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {profileModeHint}
-            </p>
+            <p className="text-xs text-muted-foreground">{profileModeHint}</p>
             {profileModes?.modes?.length ? (
               <p className="text-xs text-muted-foreground">
                 {t("profileModeAvailableModes", {
@@ -388,19 +446,29 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
 
           <div className="space-y-2">
             <Label htmlFor="sshSecurity">
-              {t("sshSecurityLevel")} <span className="text-destructive">*</span>
+              {t("sshSecurityLevel")}{" "}
+              <span className="text-destructive">*</span>
             </Label>
             <Select
               value={formData.sshSecurity}
-              onValueChange={(v) => handleInputChange("sshSecurity", v as "secure" | "balanced" | "legacy-compatible")}
+              onValueChange={(v) =>
+                handleInputChange(
+                  "sshSecurity",
+                  v as "secure" | "balanced" | "legacy-compatible",
+                )
+              }
             >
               <SelectTrigger id="sshSecurity">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="secure">{t("sshSecuritySecure")}</SelectItem>
-                <SelectItem value="balanced">{t("sshSecurityBalanced")}</SelectItem>
-                <SelectItem value="legacy-compatible">{t("sshSecurityLegacy")}</SelectItem>
+                <SelectItem value="balanced">
+                  {t("sshSecurityBalanced")}
+                </SelectItem>
+                <SelectItem value="legacy-compatible">
+                  {t("sshSecurityLegacy")}
+                </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -467,7 +535,9 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
               type="password"
               placeholder={t("enablePasswordPlaceholder")}
               value={formData.enablePassword}
-              onChange={(e) => handleInputChange("enablePassword", e.target.value)}
+              onChange={(e) =>
+                handleInputChange("enablePassword", e.target.value)
+              }
             />
           </div>
 
@@ -476,7 +546,13 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
               type="button"
               variant="outline"
               onClick={handleTestConnection}
-              disabled={testing || !formData.agentId || !formData.host || !formData.username || !formData.deviceProfile}
+              disabled={
+                testing ||
+                !formData.agentId ||
+                !formData.host ||
+                !formData.username ||
+                !formData.deviceProfile
+              }
               className="gap-2"
             >
               {testing ? (
@@ -509,12 +585,24 @@ export function AddDeviceDialog({ children }: AddDeviceDialogProps) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={submitting}
+          >
             {tc("cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !formData.name || !formData.agentId || !formData.host || !formData.deviceProfile || !formData.username || !formData.password}
+            disabled={
+              submitting ||
+              !formData.name ||
+              !formData.agentId ||
+              !formData.host ||
+              !formData.deviceProfile ||
+              !formData.username ||
+              !formData.password
+            }
           >
             {submitting ? (
               <>

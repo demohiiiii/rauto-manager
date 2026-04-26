@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -14,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Code, FormInput } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 type TxMode = string;
@@ -102,105 +100,114 @@ function parseOptionalNonNegativeInt(value: string): number | undefined {
   return parsed;
 }
 
-function parseWorkflowFromJson(rawJson: string): Partial<TxWorkflowFormData> | null {
-  try {
-    const parsed = JSON.parse(rawJson) as {
-      name?: string;
-      fail_fast?: boolean;
-      blocks?: Array<{
-        name?: string;
-        kind?: string;
-        fail_fast?: boolean;
-        rollback_policy?: string | {
-          whole_resource?: {
-            mode?: string;
-            undo_command?: string;
-            timeout_secs?: number;
-            trigger_step_index?: number;
-          };
-        };
-        steps?: Array<{
-          mode?: string;
-          command?: string;
-          timeout_secs?: number;
-          rollback_command?: string | null;
-          rollback_on_failure?: boolean;
-        }>;
-      }>;
-    };
+export function parseTxWorkflowPayloadToFormData(
+  payload: unknown,
+): TxWorkflowFormData {
+  const normalizedPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+  const workflow =
+    normalizedPayload.workflow &&
+    typeof normalizedPayload.workflow === "object" &&
+    !Array.isArray(normalizedPayload.workflow)
+      ? (normalizedPayload.workflow as Record<string, unknown>)
+      : normalizedPayload;
+  const blocks = Array.isArray(workflow.blocks) ? workflow.blocks : [];
 
-    if (!Array.isArray(parsed.blocks)) {
-      return null;
-    }
+  return {
+    name: typeof workflow.name === "string" ? workflow.name : "",
+    failFast: workflow.fail_fast !== false,
+    blocks:
+      blocks.length > 0
+        ? blocks.map((block) => {
+            const normalizedBlock =
+              block && typeof block === "object" && !Array.isArray(block)
+                ? (block as Record<string, unknown>)
+                : {};
+            const wholeResource =
+              typeof normalizedBlock.rollback_policy === "object" &&
+              normalizedBlock.rollback_policy &&
+              !Array.isArray(normalizedBlock.rollback_policy) &&
+              "whole_resource" in normalizedBlock.rollback_policy
+                ? ((
+                    normalizedBlock.rollback_policy as {
+                      whole_resource?: unknown;
+                    }
+                  ).whole_resource as Record<string, unknown> | undefined)
+                : undefined;
+            const steps = Array.isArray(normalizedBlock.steps)
+              ? normalizedBlock.steps
+              : [];
 
-    return {
-      name: parsed.name ?? "",
-      failFast: parsed.fail_fast ?? true,
-      blocks: parsed.blocks.map((block) => {
-        const wholeResource =
-          typeof block.rollback_policy === "object" &&
-          block.rollback_policy &&
-          "whole_resource" in block.rollback_policy
-            ? block.rollback_policy.whole_resource
-            : undefined;
+            return {
+              name:
+                typeof normalizedBlock.name === "string"
+                  ? normalizedBlock.name
+                  : "",
+              kind: normalizedBlock.kind === "show" ? "show" : "config",
+              failFast: normalizedBlock.fail_fast !== false,
+              rollbackPolicy: wholeResource
+                ? "whole_resource"
+                : normalizedBlock.rollback_policy === "none"
+                  ? "none"
+                  : "per_step",
+              wholeResourceMode:
+                typeof wholeResource?.mode === "string"
+                  ? wholeResource.mode
+                  : AUTO_PROFILE_MODE,
+              wholeResourceUndoCommand:
+                typeof wholeResource?.undo_command === "string"
+                  ? wholeResource.undo_command
+                  : "",
+              wholeResourceTimeoutSecs:
+                typeof wholeResource?.timeout_secs === "number"
+                  ? String(wholeResource.timeout_secs)
+                  : "",
+              wholeResourceTriggerStepIndex:
+                typeof wholeResource?.trigger_step_index === "number"
+                  ? String(wholeResource.trigger_step_index)
+                  : "",
+              steps:
+                steps.length > 0
+                  ? steps.map((step) => {
+                      const normalizedStep =
+                        step && typeof step === "object" && !Array.isArray(step)
+                          ? (step as Record<string, unknown>)
+                          : {};
 
-        return {
-          name: block.name ?? "",
-          kind: block.kind === "show" ? "show" : "config",
-          failFast: block.fail_fast ?? true,
-          rollbackPolicy: wholeResource
-            ? "whole_resource"
-            : block.rollback_policy === "none"
-              ? "none"
-              : "per_step",
-          wholeResourceMode: wholeResource?.mode ?? AUTO_PROFILE_MODE,
-          wholeResourceUndoCommand: wholeResource?.undo_command ?? "",
-          wholeResourceTimeoutSecs:
-            wholeResource?.timeout_secs !== undefined
-              ? String(wholeResource.timeout_secs)
-              : "",
-          wholeResourceTriggerStepIndex:
-            wholeResource?.trigger_step_index !== undefined
-              ? String(wholeResource.trigger_step_index)
-              : "",
-          steps: Array.isArray(block.steps) && block.steps.length > 0
-            ? block.steps.map((step) => ({
-                mode: step.mode ?? AUTO_PROFILE_MODE,
-                command: step.command ?? "",
-                timeoutSecs:
-                  step.timeout_secs !== undefined ? String(step.timeout_secs) : "",
-                rollbackCommand: step.rollback_command ?? "",
-                rollbackOnFailure: step.rollback_on_failure ?? false,
-              }))
-            : [defaultWorkflowStep()],
-        };
-      }),
-    };
-  } catch {
-    return null;
-  }
+                      return {
+                        mode:
+                          typeof normalizedStep.mode === "string"
+                            ? normalizedStep.mode
+                            : AUTO_PROFILE_MODE,
+                        command:
+                          typeof normalizedStep.command === "string"
+                            ? normalizedStep.command
+                            : "",
+                        timeoutSecs:
+                          typeof normalizedStep.timeout_secs === "number"
+                            ? String(normalizedStep.timeout_secs)
+                            : "",
+                        rollbackCommand:
+                          typeof normalizedStep.rollback_command === "string"
+                            ? normalizedStep.rollback_command
+                            : "",
+                        rollbackOnFailure:
+                          normalizedStep.rollback_on_failure === true,
+                      };
+                    })
+                  : [defaultWorkflowStep()],
+            };
+          })
+        : [defaultWorkflowBlock()],
+    rawJson: "",
+    useRawJson: false,
+  };
 }
 
 export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
   const t = useTranslations("taskForms");
-
-  const toggleMode = () => {
-    if (value.useRawJson) {
-      const parsed = parseWorkflowFromJson(value.rawJson);
-      onChange({
-        ...value,
-        ...(parsed ?? {}),
-        useRawJson: false,
-      });
-      return;
-    }
-
-    onChange({
-      ...value,
-      rawJson: JSON.stringify(buildWorkflowJson(value), null, 2),
-      useRawJson: true,
-    });
-  };
 
   const addBlock = () => {
     onChange({
@@ -218,12 +225,12 @@ export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
 
   const updateBlock = (
     index: number,
-    patch: Partial<TxWorkflowBlockFormData>
+    patch: Partial<TxWorkflowBlockFormData>,
   ) => {
     onChange({
       ...value,
       blocks: value.blocks.map((block, i) =>
-        i === index ? { ...block, ...patch } : block
+        i === index ? { ...block, ...patch } : block,
       ),
     });
   };
@@ -234,7 +241,7 @@ export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
       blocks: value.blocks.map((block, i) =>
         i === blockIndex
           ? { ...block, steps: [...block.steps, defaultWorkflowStep()] }
-          : block
+          : block,
       ),
     });
   };
@@ -248,7 +255,7 @@ export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
               ...block,
               steps: block.steps.filter((_, j) => j !== stepIndex),
             }
-          : block
+          : block,
       ),
     });
   };
@@ -256,7 +263,7 @@ export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
   const updateStep = (
     blockIndex: number,
     stepIndex: number,
-    patch: Partial<TxWorkflowStepFormData>
+    patch: Partial<TxWorkflowStepFormData>,
   ) => {
     onChange({
       ...value,
@@ -265,362 +272,341 @@ export function TxWorkflowForm({ value, onChange }: TxWorkflowFormProps) {
           ? {
               ...block,
               steps: block.steps.map((step, j) =>
-                j === stepIndex ? { ...step, ...patch } : step
+                j === stepIndex ? { ...step, ...patch } : step,
               ),
             }
-          : block
+          : block,
       ),
     });
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Label>{t("workflowDefinition")}</Label>
-        <Button type="button" variant="outline" size="sm" onClick={toggleMode}>
-          {value.useRawJson ? (
-            <>
-              <FormInput className="h-3 w-3 mr-1" />
-              {t("structuredEdit")}
-            </>
-          ) : (
-            <>
-              <Code className="h-3 w-3 mr-1" />
-              {t("jsonEdit")}
-            </>
-          )}
-        </Button>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="workflow-name">
+            {t("workflowName")} <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="workflow-name"
+            placeholder={t("workflowNamePlaceholder")}
+            value={value.name}
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+          />
+        </div>
+        <div className="flex items-center justify-between rounded-md border px-4 py-3">
+          <div className="space-y-0.5">
+            <Label>{t("workflowFailFast")}</Label>
+            <p className="text-xs text-muted-foreground">
+              {t("workflowFailFastHint")}
+            </p>
+          </div>
+          <Switch
+            checked={value.failFast}
+            onCheckedChange={(checked) =>
+              onChange({ ...value, failFast: checked })
+            }
+          />
+        </div>
       </div>
 
-      {value.useRawJson ? (
-        <div className="space-y-2">
-          <Textarea
-            className="font-mono text-sm min-h-[320px]"
-            placeholder={t("workflowJsonPlaceholder")}
-            value={value.rawJson}
-            onChange={(e) => onChange({ ...value, rawJson: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">{t("workflowJsonHint")}</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="workflow-name">
-                {t("workflowName")} <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="workflow-name"
-                placeholder={t("workflowNamePlaceholder")}
-                value={value.name}
-                onChange={(e) => onChange({ ...value, name: e.target.value })}
-              />
+      <div className="space-y-3">
+        {value.blocks.map((block, blockIndex) => (
+          <div key={blockIndex} className="rounded-md border p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("blockNumber", { number: blockIndex + 1 })}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => removeBlock(blockIndex)}
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
             </div>
-            <div className="flex items-center justify-between rounded-md border px-4 py-3">
-              <div className="space-y-0.5">
-                <Label>{t("workflowFailFast")}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("workflowFailFastHint")}
-                </p>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>{t("blockNameLabel")}</Label>
+                <Input
+                  placeholder={t("blockNamePlaceholder")}
+                  value={block.name}
+                  onChange={(e) =>
+                    updateBlock(blockIndex, { name: e.target.value })
+                  }
+                />
               </div>
-              <Switch
-                checked={value.failFast}
-                onCheckedChange={(checked) =>
-                  onChange({ ...value, failFast: checked })
-                }
-              />
+              <div className="space-y-2">
+                <Label>{t("blockKind")}</Label>
+                <Select
+                  value={block.kind}
+                  onValueChange={(next) =>
+                    updateBlock(blockIndex, {
+                      kind: next as WorkflowBlockKind,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="config">
+                      {t("blockKindConfig")}
+                    </SelectItem>
+                    <SelectItem value="show">{t("blockKindShow")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-3">
-            {value.blocks.map((block, blockIndex) => (
-              <div key={blockIndex} className="rounded-md border p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("blockNumber", { number: blockIndex + 1 })}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeBlock(blockIndex)}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-center justify-between rounded-md border px-4 py-3">
+                <div className="space-y-0.5">
+                  <Label>{t("blockFailFast")}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("blockFailFastHint")}
+                  </p>
                 </div>
+                <Switch
+                  checked={block.failFast}
+                  onCheckedChange={(checked) =>
+                    updateBlock(blockIndex, { failFast: checked })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("rollbackPolicy")}</Label>
+                <Select
+                  value={block.rollbackPolicy}
+                  onValueChange={(next) =>
+                    updateBlock(blockIndex, {
+                      rollbackPolicy: next as WorkflowRollbackPolicy,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_step">
+                      {t("rollbackPolicyPerStep")}
+                    </SelectItem>
+                    <SelectItem value="whole_resource">
+                      {t("rollbackPolicyWholeResource")}
+                    </SelectItem>
+                    <SelectItem value="none">
+                      {t("rollbackPolicyNone")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
+            {block.rollbackPolicy === "whole_resource" && (
+              <div className="rounded-md border p-4 space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>{t("blockNameLabel")}</Label>
+                    <Label>{t("wholeResourceMode")}</Label>
+                    <Select
+                      value={block.wholeResourceMode}
+                      onValueChange={(next) =>
+                        updateBlock(blockIndex, {
+                          wholeResourceMode: next as TxMode,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Enable">
+                          {t("modeEnable")}
+                        </SelectItem>
+                        <SelectItem value="Config">
+                          {t("modeConfig")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("wholeResourceTimeout")}</Label>
                     <Input
-                      placeholder={t("blockNamePlaceholder")}
-                      value={block.name}
+                      inputMode="numeric"
+                      placeholder={t("wholeResourceTimeoutPlaceholder")}
+                      value={block.wholeResourceTimeoutSecs}
                       onChange={(e) =>
-                        updateBlock(blockIndex, { name: e.target.value })
+                        updateBlock(blockIndex, {
+                          wholeResourceTimeoutSecs: e.target.value,
+                        })
                       }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>{t("blockKind")}</Label>
-                    <Select
-                      value={block.kind}
-                      onValueChange={(next) =>
-                        updateBlock(blockIndex, {
-                          kind: next as WorkflowBlockKind,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="config">{t("blockKindConfig")}</SelectItem>
-                        <SelectItem value="show">{t("blockKindShow")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="flex items-center justify-between rounded-md border px-4 py-3">
-                    <div className="space-y-0.5">
-                      <Label>{t("blockFailFast")}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("blockFailFastHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={block.failFast}
-                      onCheckedChange={(checked) =>
-                        updateBlock(blockIndex, { failFast: checked })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("rollbackPolicy")}</Label>
-                    <Select
-                      value={block.rollbackPolicy}
-                      onValueChange={(next) =>
-                        updateBlock(blockIndex, {
-                          rollbackPolicy: next as WorkflowRollbackPolicy,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="per_step">
-                          {t("rollbackPolicyPerStep")}
-                        </SelectItem>
-                        <SelectItem value="whole_resource">
-                          {t("rollbackPolicyWholeResource")}
-                        </SelectItem>
-                        <SelectItem value="none">
-                          {t("rollbackPolicyNone")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>{t("wholeResourceUndoCommand")}</Label>
+                  <Input
+                    placeholder={t("wholeResourceUndoCommandPlaceholder")}
+                    value={block.wholeResourceUndoCommand}
+                    onChange={(e) =>
+                      updateBlock(blockIndex, {
+                        wholeResourceUndoCommand: e.target.value,
+                      })
+                    }
+                  />
                 </div>
 
-                {block.rollbackPolicy === "whole_resource" && (
-                  <div className="rounded-md border p-4 space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>{t("wholeResourceMode")}</Label>
-                        <Select
-                          value={block.wholeResourceMode}
-                          onValueChange={(next) =>
-                            updateBlock(blockIndex, {
-                              wholeResourceMode: next as TxMode,
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Enable">{t("modeEnable")}</SelectItem>
-                            <SelectItem value="Config">{t("modeConfig")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t("wholeResourceTimeout")}</Label>
-                        <Input
-                          inputMode="numeric"
-                          placeholder={t("wholeResourceTimeoutPlaceholder")}
-                          value={block.wholeResourceTimeoutSecs}
-                          onChange={(e) =>
-                            updateBlock(blockIndex, {
-                              wholeResourceTimeoutSecs: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
+                <div className="space-y-2">
+                  <Label>{t("wholeResourceTriggerStepIndex")}</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder={t("wholeResourceTriggerStepIndexPlaceholder")}
+                    value={block.wholeResourceTriggerStepIndex}
+                    onChange={(e) =>
+                      updateBlock(blockIndex, {
+                        wholeResourceTriggerStepIndex: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
 
-                    <div className="space-y-2">
-                      <Label>{t("wholeResourceUndoCommand")}</Label>
-                      <Input
-                        placeholder={t("wholeResourceUndoCommandPlaceholder")}
-                        value={block.wholeResourceUndoCommand}
-                        onChange={(e) =>
-                          updateBlock(blockIndex, {
-                            wholeResourceUndoCommand: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>{t("commandList")}</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addStep(blockIndex)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  {t("addCommand")}
+                </Button>
+              </div>
 
-                    <div className="space-y-2">
-                      <Label>{t("wholeResourceTriggerStepIndex")}</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder={t("wholeResourceTriggerStepIndexPlaceholder")}
-                        value={block.wholeResourceTriggerStepIndex}
-                        onChange={(e) =>
-                          updateBlock(blockIndex, {
-                            wholeResourceTriggerStepIndex: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-3">
+              {block.steps.map((step, stepIndex) => (
+                <div
+                  key={stepIndex}
+                  className="rounded-md border p-3 space-y-3"
+                >
                   <div className="flex items-center justify-between">
-                    <Label>{t("commandList")}</Label>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t("stepNumber", { number: stepIndex + 1 })}
+                    </span>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      onClick={() => addStep(blockIndex)}
+                      onClick={() => removeStep(blockIndex, stepIndex)}
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                     >
-                      <Plus className="h-3 w-3 mr-1" />
-                      {t("addCommand")}
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
 
-                  {block.steps.map((step, stepIndex) => (
-                    <div
-                      key={stepIndex}
-                      className="rounded-md border p-3 space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {t("stepNumber", { number: stepIndex + 1 })}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeStep(blockIndex, stepIndex)}
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>{t("stepMode")}</Label>
-                          <Select
-                            value={step.mode}
-                            onValueChange={(next) =>
-                              updateStep(blockIndex, stepIndex, {
-                                mode: next as TxMode,
-                              })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Enable">{t("modeEnable")}</SelectItem>
-                              <SelectItem value="Config">{t("modeConfig")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("stepTimeout")}</Label>
-                          <Input
-                            inputMode="numeric"
-                            placeholder={t("stepTimeoutPlaceholder")}
-                            value={step.timeoutSecs}
-                            onChange={(e) =>
-                              updateStep(blockIndex, stepIndex, {
-                                timeoutSecs: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>{t("commandLabel")}</Label>
-                        <Input
-                          placeholder={t("commandPlaceholder")}
-                          value={step.command}
-                          onChange={(e) =>
-                            updateStep(blockIndex, stepIndex, {
-                              command: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>{t("rollbackCommand")}</Label>
-                        <Input
-                          placeholder={t("rollbackCommandPlaceholder")}
-                          value={step.rollbackCommand}
-                          onChange={(e) =>
-                            updateStep(blockIndex, stepIndex, {
-                              rollbackCommand: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between rounded-md border px-4 py-3">
-                        <div className="space-y-0.5">
-                          <Label>{t("rollbackOnFailure")}</Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("rollbackOnFailureHint")}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={step.rollbackOnFailure}
-                          onCheckedChange={(checked) =>
-                            updateStep(blockIndex, stepIndex, {
-                              rollbackOnFailure: checked,
-                            })
-                          }
-                        />
-                      </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>{t("stepMode")}</Label>
+                      <Select
+                        value={step.mode}
+                        onValueChange={(next) =>
+                          updateStep(blockIndex, stepIndex, {
+                            mode: next as TxMode,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Enable">
+                            {t("modeEnable")}
+                          </SelectItem>
+                          <SelectItem value="Config">
+                            {t("modeConfig")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                    <div className="space-y-2">
+                      <Label>{t("stepTimeout")}</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder={t("stepTimeoutPlaceholder")}
+                        value={step.timeoutSecs}
+                        onChange={(e) =>
+                          updateStep(blockIndex, stepIndex, {
+                            timeoutSecs: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addBlock}
-              className="w-full"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              {t("addBlock")}
-            </Button>
+                  <div className="space-y-2">
+                    <Label>{t("commandLabel")}</Label>
+                    <Input
+                      placeholder={t("commandPlaceholder")}
+                      value={step.command}
+                      onChange={(e) =>
+                        updateStep(blockIndex, stepIndex, {
+                          command: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("rollbackCommand")}</Label>
+                    <Input
+                      placeholder={t("rollbackCommandPlaceholder")}
+                      value={step.rollbackCommand}
+                      onChange={(e) =>
+                        updateStep(blockIndex, stepIndex, {
+                          rollbackCommand: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-md border px-4 py-3">
+                    <div className="space-y-0.5">
+                      <Label>{t("rollbackOnFailure")}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("rollbackOnFailureHint")}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={step.rollbackOnFailure}
+                      onCheckedChange={(checked) =>
+                        updateStep(blockIndex, stepIndex, {
+                          rollbackOnFailure: checked,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addBlock}
+          className="w-full"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          {t("addBlock")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -658,12 +644,14 @@ function buildWorkflowJson(data: TxWorkflowFormData): Record<string, unknown> {
             ? { mode: block.wholeResourceMode }
             : {}),
         };
-        const timeoutSecs = parseOptionalPositiveInt(block.wholeResourceTimeoutSecs);
+        const timeoutSecs = parseOptionalPositiveInt(
+          block.wholeResourceTimeoutSecs,
+        );
         if (timeoutSecs !== undefined) {
           wholeResource.timeout_secs = timeoutSecs;
         }
         const triggerStepIndex = parseOptionalNonNegativeInt(
-          block.wholeResourceTriggerStepIndex
+          block.wholeResourceTriggerStepIndex,
         );
         if (triggerStepIndex !== undefined) {
           wholeResource.trigger_step_index = triggerStepIndex;
@@ -680,15 +668,9 @@ function buildWorkflowJson(data: TxWorkflowFormData): Record<string, unknown> {
   };
 }
 
-export function buildTxWorkflowPayload(data: TxWorkflowFormData): Record<string, unknown> {
-  if (data.useRawJson) {
-    try {
-      return { workflow: JSON.parse(data.rawJson) };
-    } catch {
-      return { workflow: {} };
-    }
-  }
-
+export function buildTxWorkflowPayload(
+  data: TxWorkflowFormData,
+): Record<string, unknown> {
   return {
     workflow: buildWorkflowJson(data),
   };
@@ -696,23 +678,8 @@ export function buildTxWorkflowPayload(data: TxWorkflowFormData): Record<string,
 
 export function validateTxWorkflowForm(
   data: TxWorkflowFormData,
-  t: (key: string, params?: Record<string, string | number | Date>) => string
+  t: (key: string, params?: Record<string, string | number | Date>) => string,
 ): string | null {
-  if (data.useRawJson) {
-    if (!data.rawJson.trim()) {
-      return t("enterWorkflowJson");
-    }
-    try {
-      const parsed = JSON.parse(data.rawJson) as { blocks?: unknown };
-      if (!Array.isArray(parsed.blocks)) {
-        return t("jsonMustContainBlocks");
-      }
-    } catch {
-      return t("invalidJson");
-    }
-    return null;
-  }
-
   if (!data.name.trim()) {
     return t("workflowNameRequired");
   }
@@ -743,7 +710,8 @@ export function validateTxWorkflowForm(
     }
     if (
       block.wholeResourceTriggerStepIndex.trim() &&
-      parseOptionalNonNegativeInt(block.wholeResourceTriggerStepIndex) === undefined
+      parseOptionalNonNegativeInt(block.wholeResourceTriggerStepIndex) ===
+        undefined
     ) {
       return t("nonNegativeIntegerRequired");
     }

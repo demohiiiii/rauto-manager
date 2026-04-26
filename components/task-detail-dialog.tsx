@@ -445,13 +445,9 @@ function hasHistoryCommandEchoes(history: ExecutionHistory[]): boolean {
 
 function getConfiguredRecordLevel(
   task: TaskDetailLike,
-): "legacy-off" | "KeyEventsOnly" | "Full" | null {
+): "KeyEventsOnly" | "Full" | null {
   const payload = asObject(task.payload);
   const value = payload?.record_level;
-  if (value === "Off") {
-    return "legacy-off";
-  }
-
   if (value === "KeyEventsOnly" || value === "Full") {
     return value;
   }
@@ -639,24 +635,15 @@ export function TaskDetailDialog({
     supportsCommandEchoHint &&
     ["success", "failed", "cancelled"].includes(detailTask.status) &&
     !hasCommandEchoes;
-  const commandEchoHintTitle =
-    configuredRecordLevel === "legacy-off"
-      ? t("taskDetailRecordingDisabledTitle")
-      : configuredRecordLevel
-        ? t("taskDetailRecordingUnavailableTitle")
-        : t("taskDetailRecordingUnknownTitle");
-  const commandEchoHintDescription =
-    configuredRecordLevel === "legacy-off"
-      ? t("taskDetailRecordingDisabledDescription")
-      : configuredRecordLevel
-        ? t("taskDetailRecordingUnavailableDescription")
-        : t("taskDetailRecordingUnknownDescription");
-  const historyEmptyText =
-    configuredRecordLevel === "legacy-off"
-      ? t("taskDetailHistoryRecordingDisabled")
-      : configuredRecordLevel
-        ? t("taskDetailHistoryRecordingUnavailable")
-        : t("taskDetailHistoryNoOutput");
+  const commandEchoHintTitle = configuredRecordLevel
+    ? t("taskDetailRecordingUnavailableTitle")
+    : t("taskDetailRecordingUnknownTitle");
+  const commandEchoHintDescription = configuredRecordLevel
+    ? t("taskDetailRecordingUnavailableDescription")
+    : t("taskDetailRecordingUnknownDescription");
+  const historyEmptyText = configuredRecordLevel
+    ? t("taskDetailHistoryRecordingUnavailable")
+    : t("taskDetailHistoryNoOutput");
 
   const statusConfig =
     STATUS_CONFIG[detailTask.status] ?? STATUS_CONFIG.pending;

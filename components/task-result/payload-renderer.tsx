@@ -1,15 +1,7 @@
-import type { DispatchType } from "@/lib/types";
+import type { ConnectionPayload, DispatchType } from "@/lib/types";
 import { useTranslations } from "next-intl";
-import {
-  SectionCard,
-  KeyValueRow,
-  OutputBlock,
-} from "./shared";
-import {
-  asArrayOfObjects,
-  asObject,
-  asString,
-} from "./result-helpers";
+import { SectionCard, KeyValueRow, OutputBlock } from "./shared";
+import { asArrayOfObjects, asObject, asString } from "./result-helpers";
 
 interface PayloadRendererProps {
   dispatchType: DispatchType;
@@ -30,7 +22,10 @@ export function PayloadRenderer({
   return (
     <div className="space-y-3">
       {/* Connection details card */}
-      <ConnectionCard connection={payload.connection as Record<string, unknown> | undefined} t={t} />
+      <ConnectionCard
+        connection={payload.connection as ConnectionPayload | undefined}
+        t={t}
+      />
 
       {/* Render by dispatch type */}
       {dispatchType === "exec" && <ExecPayload payload={payload} t={t} />}
@@ -56,7 +51,7 @@ function ConnectionCard({
   connection,
   t,
 }: {
-  connection?: Record<string, unknown>;
+  connection?: ConnectionPayload;
   t: TFunc;
 }) {
   if (!connection) return null;
@@ -83,6 +78,69 @@ function ConnectionCard({
             label={t("deviceType")}
             value={String(connection.device_profile)}
           />
+        )}
+        {connection.username != null && (
+          <KeyValueRow
+            label={t("username")}
+            value={String(connection.username)}
+            mono
+          />
+        )}
+        {connection.ssh_security != null && (
+          <KeyValueRow
+            label={t("sshSecurity")}
+            value={String(connection.ssh_security)}
+          />
+        )}
+        {connection.linux_shell_flavor != null && (
+          <KeyValueRow
+            label={t("linuxShellFlavor")}
+            value={String(connection.linux_shell_flavor)}
+          />
+        )}
+        {connection.template_dir != null && (
+          <KeyValueRow
+            label={t("templateDir")}
+            value={String(connection.template_dir)}
+            mono
+          />
+        )}
+        {connection.enable_password_empty_enter !== undefined && (
+          <KeyValueRow
+            label={t("enablePasswordEmptyEnter")}
+            value={connection.enable_password_empty_enter ? t("on") : t("off")}
+          />
+        )}
+        {connection.enabled !== undefined && (
+          <KeyValueRow
+            label={t("enabled")}
+            value={connection.enabled ? t("on") : t("off")}
+          />
+        )}
+        {Array.isArray(connection.labels) && connection.labels.length > 0 && (
+          <KeyValueRow
+            label={t("labels")}
+            value={connection.labels.join(", ")}
+            mono
+          />
+        )}
+        {Array.isArray(connection.groups) && connection.groups.length > 0 && (
+          <KeyValueRow
+            label={t("groups")}
+            value={connection.groups.join(", ")}
+            mono
+          />
+        )}
+        {connection.vars != null && (
+          <div className="pt-1">
+            <span className="text-xs text-muted-foreground">
+              {t("variables")}:
+            </span>
+            <OutputBlock
+              content={JSON.stringify(connection.vars, null, 2)}
+              maxHeight="120px"
+            />
+          </div>
         )}
       </div>
     </SectionCard>
@@ -146,12 +204,12 @@ function TemplatePayload({
         )}
         {vars != null && (
           <div className="pt-1">
-            <span className="text-xs text-muted-foreground">{t("variables")}:</span>
+            <span className="text-xs text-muted-foreground">
+              {t("variables")}:
+            </span>
             <OutputBlock
               content={
-                typeof vars === "string"
-                  ? vars
-                  : JSON.stringify(vars, null, 2)
+                typeof vars === "string" ? vars : JSON.stringify(vars, null, 2)
               }
               maxHeight="120px"
             />
@@ -250,7 +308,9 @@ function TxBlockPayload({
 
         {vars != null && (
           <div className="pt-1">
-            <span className="text-xs text-muted-foreground">{t("variables")}:</span>
+            <span className="text-xs text-muted-foreground">
+              {t("variables")}:
+            </span>
             <OutputBlock
               content={
                 typeof vars === "string" ? vars : JSON.stringify(vars, null, 2)
@@ -345,6 +405,7 @@ function OrchestratePayload({
   payload: Record<string, unknown>;
   t: TFunc;
 }) {
+  const tf = useTranslations("taskForms");
   const plan = asObject(payload.plan) ?? payload;
   const stages = asArrayOfObjects(plan.stages);
 
@@ -353,11 +414,7 @@ function OrchestratePayload({
       <SectionCard>
         <div className="space-y-0.5">
           {plan.name != null && (
-            <KeyValueRow
-              label={t("planName")}
-              value={String(plan.name)}
-              mono
-            />
+            <KeyValueRow label={t("planName")} value={String(plan.name)} mono />
           )}
           {plan.fail_fast !== undefined && (
             <KeyValueRow
@@ -365,8 +422,26 @@ function OrchestratePayload({
               value={plan.fail_fast ? t("on") : t("off")}
             />
           )}
+          {plan.rollback_on_stage_failure !== undefined && (
+            <KeyValueRow
+              label={tf("rollbackOnStageFailure")}
+              value={plan.rollback_on_stage_failure ? t("on") : t("off")}
+            />
+          )}
+          {plan.rollback_completed_stages_on_failure !== undefined && (
+            <KeyValueRow
+              label={tf("rollbackCompletedStagesOnFailure")}
+              value={
+                plan.rollback_completed_stages_on_failure ? t("on") : t("off")
+              }
+            />
+          )}
           {payload.base_dir != null && (
-            <KeyValueRow label={t("baseDir")} value={String(payload.base_dir)} mono />
+            <KeyValueRow
+              label={t("baseDir")}
+              value={String(payload.base_dir)}
+              mono
+            />
           )}
           {plan.inventory_file != null && (
             <KeyValueRow
@@ -381,7 +456,9 @@ function OrchestratePayload({
       {plan.inventory != null && (
         <SectionCard>
           <div className="pt-1">
-            <span className="text-xs text-muted-foreground">{t("inventory")}:</span>
+            <span className="text-xs text-muted-foreground">
+              {t("inventory")}:
+            </span>
             <OutputBlock
               content={JSON.stringify(plan.inventory, null, 2)}
               maxHeight="140px"
@@ -390,56 +467,104 @@ function OrchestratePayload({
         </SectionCard>
       )}
 
-      {stages.map((stage, i) => (
-        <SectionCard
-          key={i}
-          title={`${t("stageName")}: ${asString(stage.name) ?? `#${i + 1}`}`}
-        >
-          <div className="space-y-1 text-sm">
-            {stage.strategy != null && (
-              <KeyValueRow label={t("strategy")} value={String(stage.strategy)} />
-            )}
-            {stage.max_parallel !== undefined && (
-              <KeyValueRow label={t("maxParallel")} value={String(stage.max_parallel)} />
-            )}
-            {stage.fail_fast !== undefined && (
-              <KeyValueRow
-                label={t("failFast")}
-                value={stage.fail_fast ? t("on") : t("off")}
-              />
-            )}
-            {Array.isArray(stage.target_groups) && stage.target_groups.length > 0 && (
-              <KeyValueRow
-                label={t("targetGroups")}
-                value={stage.target_groups.join(", ")}
-                mono
-              />
-            )}
-            {Array.isArray(stage.targets) && stage.targets.length > 0 && (
-              <div className="pt-1">
-                <span className="text-xs text-muted-foreground">
-                  {t("targetLabel")}:
-                </span>
-                <OutputBlock
-                  content={JSON.stringify(stage.targets, null, 2)}
-                  maxHeight="100px"
+      {stages.map((stage, i) => {
+        const jobs = asArrayOfObjects(stage.jobs);
+
+        return (
+          <SectionCard
+            key={i}
+            title={`${t("stageName")}: ${asString(stage.name) ?? `#${i + 1}`}`}
+          >
+            <div className="space-y-3 text-sm">
+              {stage.strategy != null && (
+                <KeyValueRow
+                  label={t("strategy")}
+                  value={String(stage.strategy)}
                 />
-              </div>
-            )}
-            {stage.action != null && (
-              <div className="pt-1">
-                <span className="text-xs text-muted-foreground">
-                  {t("actionSummary")}:
-                </span>
-                <OutputBlock
-                  content={JSON.stringify(stage.action, null, 2)}
-                  maxHeight="100px"
+              )}
+              {stage.max_parallel !== undefined && (
+                <KeyValueRow
+                  label={t("maxParallel")}
+                  value={String(stage.max_parallel)}
                 />
-              </div>
-            )}
-          </div>
-        </SectionCard>
-      ))}
+              )}
+              {stage.fail_fast !== undefined && (
+                <KeyValueRow
+                  label={t("failFast")}
+                  value={stage.fail_fast ? t("on") : t("off")}
+                />
+              )}
+              <KeyValueRow label={t("jobsTotal")} value={jobs.length} />
+
+              {jobs.map((job, jobIndex) => (
+                <SectionCard
+                  key={`${i}-${jobIndex}`}
+                  title={`${t("jobName")}: ${asString(job.name) ?? `#${jobIndex + 1}`}`}
+                >
+                  <div className="space-y-1 text-sm">
+                    {job.strategy != null && (
+                      <KeyValueRow
+                        label={t("strategy")}
+                        value={String(job.strategy)}
+                      />
+                    )}
+                    {job.max_parallel !== undefined && (
+                      <KeyValueRow
+                        label={t("maxParallel")}
+                        value={String(job.max_parallel)}
+                      />
+                    )}
+                    {job.fail_fast !== undefined && (
+                      <KeyValueRow
+                        label={t("failFast")}
+                        value={job.fail_fast ? t("on") : t("off")}
+                      />
+                    )}
+                    {Array.isArray(job.target_groups) &&
+                      job.target_groups.length > 0 && (
+                        <KeyValueRow
+                          label={t("targetGroups")}
+                          value={job.target_groups.join(", ")}
+                          mono
+                        />
+                      )}
+                    {Array.isArray(job.target_tags) &&
+                      job.target_tags.length > 0 && (
+                        <KeyValueRow
+                          label={t("targetTags")}
+                          value={job.target_tags.join(", ")}
+                          mono
+                        />
+                      )}
+                    {Array.isArray(job.targets) && job.targets.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {t("targetLabel")}:
+                        </span>
+                        <OutputBlock
+                          content={JSON.stringify(job.targets, null, 2)}
+                          maxHeight="100px"
+                        />
+                      </div>
+                    )}
+                    {job.action != null && (
+                      <div className="pt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {t("actionSummary")}:
+                        </span>
+                        <OutputBlock
+                          content={JSON.stringify(job.action, null, 2)}
+                          maxHeight="100px"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
+              ))}
+            </div>
+          </SectionCard>
+        );
+      })}
     </div>
   );
 }

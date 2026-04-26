@@ -18,20 +18,31 @@ import { useTranslations } from "next-intl";
 type StageStrategy = "serial" | "parallel";
 type OrchestrationActionKind = "tx_block" | "tx_workflow";
 
-export interface OrchestrateStageFormData {
+export interface OrchestrateJobFormData {
   name: string;
   strategy: StageStrategy;
   maxParallel: string;
   failFast: boolean;
   targetGroups: string;
+  targetTags: string;
   targetsJson: string;
   actionKind: OrchestrationActionKind;
   actionJson: string;
 }
 
+export interface OrchestrateStageFormData {
+  name: string;
+  strategy: StageStrategy;
+  maxParallel: string;
+  failFast: boolean;
+  jobs: OrchestrateJobFormData[];
+}
+
 export interface OrchestrateFormData {
   name: string;
   failFast: boolean;
+  rollbackOnStageFailure: boolean;
+  rollbackCompletedStagesOnFailure: boolean;
   inventoryFile: string;
   inventoryJson: string;
   baseDir: string;
@@ -52,7 +63,7 @@ function defaultActionJson(kind: OrchestrationActionKind): string {
         workflow_file: "./core-vlan-workflow.json",
       },
       null,
-      2
+      2,
     );
   }
 
@@ -62,8 +73,22 @@ function defaultActionJson(kind: OrchestrationActionKind): string {
       commands: ["show version"],
     },
     null,
-    2
+    2,
   );
+}
+
+function defaultJob(): OrchestrateJobFormData {
+  return {
+    name: "",
+    strategy: "serial",
+    maxParallel: "",
+    failFast: true,
+    targetGroups: "",
+    targetTags: "",
+    targetsJson: "",
+    actionKind: "tx_block",
+    actionJson: defaultActionJson("tx_block"),
+  };
 }
 
 function defaultStage(): OrchestrateStageFormData {
@@ -72,10 +97,7 @@ function defaultStage(): OrchestrateStageFormData {
     strategy: "serial",
     maxParallel: "",
     failFast: true,
-    targetGroups: "",
-    targetsJson: "",
-    actionKind: "tx_block",
-    actionJson: defaultActionJson("tx_block"),
+    jobs: [defaultJob()],
   };
 }
 
@@ -93,15 +115,26 @@ function parseOptionalPositiveInt(value: string): number | undefined {
   return parsed;
 }
 
+function parseCsvList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function parsePlanFromJson(rawJson: string): Partial<OrchestrateFormData> | null {
+function parsePlanFromJson(
+  rawJson: string,
+): Partial<OrchestrateFormData> | null {
   try {
     const parsed = JSON.parse(rawJson) as {
       name?: string;
       fail_fast?: boolean;
+      rollback_on_stage_failure?: boolean;
+      rollback_completed_stages_on_failure?: boolean;
       inventory_file?: string;
       inventory?: unknown;
       stages?: Array<{
@@ -109,12 +142,19 @@ function parsePlanFromJson(rawJson: string): Partial<OrchestrateFormData> | null
         strategy?: string;
         max_parallel?: number;
         fail_fast?: boolean;
-        target_groups?: string[];
-        targets?: unknown;
-        action?: {
-          kind?: string;
-          [key: string]: unknown;
-        };
+        jobs?: Array<{
+          name?: string;
+          strategy?: string;
+          max_parallel?: number;
+          fail_fast?: boolean;
+          target_groups?: string[];
+          target_tags?: string[];
+          targets?: unknown;
+          action?: {
+            kind?: string;
+            [key: string]: unknown;
+          };
+        }>;
       }>;
     };
 
@@ -125,51 +165,88 @@ function parsePlanFromJson(rawJson: string): Partial<OrchestrateFormData> | null
     return {
       name: parsed.name ?? "",
       failFast: parsed.fail_fast ?? true,
+      rollbackOnStageFailure: parsed.rollback_on_stage_failure ?? false,
+      rollbackCompletedStagesOnFailure:
+        parsed.rollback_completed_stages_on_failure ?? false,
       inventoryFile: parsed.inventory_file ?? "",
       inventoryJson: parsed.inventory
         ? JSON.stringify(parsed.inventory, null, 2)
         : "",
-      stages: parsed.stages.map((stage) => {
-        const action = stage.action ?? {};
-        const actionKind =
-          action.kind === "tx_workflow" ? "tx_workflow" : "tx_block";
-        const { kind: _kind, ...actionPayload } = action;
+      stages: parsed.stages.map((stage) => ({
+        name: stage.name ?? "",
+        strategy: stage.strategy === "parallel" ? "parallel" : "serial",
+        maxParallel:
+          stage.max_parallel !== undefined ? String(stage.max_parallel) : "",
+        failFast: stage.fail_fast ?? true,
+        jobs: Array.isArray(stage.jobs)
+          ? stage.jobs.map((job) => {
+              const action = job.action ?? {};
+              const actionKind =
+                action.kind === "tx_workflow" ? "tx_workflow" : "tx_block";
+              const actionPayload = Object.fromEntries(
+                Object.entries(action).filter(([key]) => key !== "kind"),
+              );
 
-        return {
-          name: stage.name ?? "",
-          strategy: stage.strategy === "parallel" ? "parallel" : "serial",
-          maxParallel:
-            stage.max_parallel !== undefined ? String(stage.max_parallel) : "",
-          failFast: stage.fail_fast ?? true,
-          targetGroups: Array.isArray(stage.target_groups)
-            ? stage.target_groups.join(", ")
-            : "",
-          targetsJson: stage.targets
-            ? JSON.stringify(stage.targets, null, 2)
-            : "",
-          actionKind,
-          actionJson: JSON.stringify(actionPayload, null, 2),
-        };
-      }),
+              return {
+                name: job.name ?? "",
+                strategy: job.strategy === "parallel" ? "parallel" : "serial",
+                maxParallel:
+                  job.max_parallel !== undefined
+                    ? String(job.max_parallel)
+                    : "",
+                failFast: job.fail_fast ?? true,
+                targetGroups: Array.isArray(job.target_groups)
+                  ? job.target_groups.join(", ")
+                  : "",
+                targetTags: Array.isArray(job.target_tags)
+                  ? job.target_tags.join(", ")
+                  : "",
+                targetsJson: job.targets
+                  ? JSON.stringify(job.targets, null, 2)
+                  : "",
+                actionKind,
+                actionJson: JSON.stringify(actionPayload, null, 2),
+              };
+            })
+          : [],
+      })),
     };
   } catch {
     return null;
   }
 }
 
+function buildJobJson(job: OrchestrateJobFormData): Record<string, unknown> {
+  const actionPayload = JSON.parse(job.actionJson) as Record<string, unknown>;
+  const targets = job.targetsJson.trim()
+    ? (JSON.parse(job.targetsJson) as unknown[])
+    : undefined;
+  const targetGroups = parseCsvList(job.targetGroups);
+  const targetTags = parseCsvList(job.targetTags);
+  const maxParallel = parseOptionalPositiveInt(job.maxParallel);
+
+  return {
+    ...(job.name.trim() ? { name: job.name.trim() } : {}),
+    strategy: job.strategy,
+    ...(maxParallel !== undefined ? { max_parallel: maxParallel } : {}),
+    fail_fast: job.failFast,
+    ...(targetGroups.length > 0 ? { target_groups: targetGroups } : {}),
+    ...(targetTags.length > 0 ? { target_tags: targetTags } : {}),
+    ...(targets ? { targets } : {}),
+    action: {
+      kind: job.actionKind,
+      ...actionPayload,
+    },
+  };
+}
+
 function buildPlanJson(data: OrchestrateFormData): Record<string, unknown> {
   const plan: Record<string, unknown> = {
     name: data.name.trim(),
     fail_fast: data.failFast,
+    rollback_on_stage_failure: data.rollbackOnStageFailure,
+    rollback_completed_stages_on_failure: data.rollbackCompletedStagesOnFailure,
     stages: data.stages.map((stage) => {
-      const actionPayload = JSON.parse(stage.actionJson) as Record<string, unknown>;
-      const targets = stage.targetsJson.trim()
-        ? (JSON.parse(stage.targetsJson) as unknown[])
-        : undefined;
-      const targetGroups = stage.targetGroups
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
       const maxParallel = parseOptionalPositiveInt(stage.maxParallel);
 
       return {
@@ -177,12 +254,7 @@ function buildPlanJson(data: OrchestrateFormData): Record<string, unknown> {
         strategy: stage.strategy,
         ...(maxParallel !== undefined ? { max_parallel: maxParallel } : {}),
         fail_fast: stage.failFast,
-        ...(targetGroups.length > 0 ? { target_groups: targetGroups } : {}),
-        ...(targets ? { targets } : {}),
-        action: {
-          kind: stage.actionKind,
-          ...actionPayload,
-        },
+        jobs: stage.jobs.map((job) => buildJobJson(job)),
       };
     }),
   };
@@ -240,11 +312,61 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
     });
   };
 
-  const updateStage = (index: number, patch: Partial<OrchestrateStageFormData>) => {
+  const updateStage = (
+    index: number,
+    patch: Partial<OrchestrateStageFormData>,
+  ) => {
     onChange({
       ...value,
       stages: value.stages.map((stage, i) =>
-        i === index ? { ...stage, ...patch } : stage
+        i === index ? { ...stage, ...patch } : stage,
+      ),
+    });
+  };
+
+  const addJob = (stageIndex: number) => {
+    onChange({
+      ...value,
+      stages: value.stages.map((stage, index) =>
+        index === stageIndex
+          ? { ...stage, jobs: [...stage.jobs, defaultJob()] }
+          : stage,
+      ),
+    });
+  };
+
+  const removeJob = (stageIndex: number, jobIndex: number) => {
+    onChange({
+      ...value,
+      stages: value.stages.map((stage, index) =>
+        index === stageIndex
+          ? {
+              ...stage,
+              jobs: stage.jobs.filter(
+                (_, currentJobIndex) => currentJobIndex !== jobIndex,
+              ),
+            }
+          : stage,
+      ),
+    });
+  };
+
+  const updateJob = (
+    stageIndex: number,
+    jobIndex: number,
+    patch: Partial<OrchestrateJobFormData>,
+  ) => {
+    onChange({
+      ...value,
+      stages: value.stages.map((stage, index) =>
+        index === stageIndex
+          ? {
+              ...stage,
+              jobs: stage.jobs.map((job, currentJobIndex) =>
+                currentJobIndex === jobIndex ? { ...job, ...patch } : job,
+              ),
+            }
+          : stage,
       ),
     });
   };
@@ -324,23 +446,59 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
             </div>
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex items-center justify-between rounded-md border px-4 py-3">
+              <div className="space-y-0.5">
+                <Label>{t("planFailFast")}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("planFailFastHint")}
+                </p>
+              </div>
+              <Switch
+                checked={value.failFast}
+                onCheckedChange={(checked) =>
+                  onChange({ ...value, failFast: checked })
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border px-4 py-3">
+              <div className="space-y-0.5">
+                <Label>{t("rollbackOnStageFailure")}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("rollbackOnStageFailureHint")}
+                </p>
+              </div>
+              <Switch
+                checked={value.rollbackOnStageFailure}
+                onCheckedChange={(checked) =>
+                  onChange({ ...value, rollbackOnStageFailure: checked })
+                }
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between rounded-md border px-4 py-3">
             <div className="space-y-0.5">
-              <Label>{t("planFailFast")}</Label>
+              <Label>{t("rollbackCompletedStagesOnFailure")}</Label>
               <p className="text-xs text-muted-foreground">
-                {t("planFailFastHint")}
+                {t("rollbackCompletedStagesOnFailureHint")}
               </p>
             </div>
             <Switch
-              checked={value.failFast}
+              checked={value.rollbackCompletedStagesOnFailure}
               onCheckedChange={(checked) =>
-                onChange({ ...value, failFast: checked })
+                onChange({
+                  ...value,
+                  rollbackCompletedStagesOnFailure: checked,
+                })
               }
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="orchestrate-inventory-json">{t("inventoryJson")}</Label>
+            <Label htmlFor="orchestrate-inventory-json">
+              {t("inventoryJson")}
+            </Label>
             <Textarea
               id="orchestrate-inventory-json"
               className="min-h-[140px] font-mono text-sm"
@@ -356,17 +514,17 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
           </div>
 
           <div className="space-y-3">
-            {value.stages.map((stage, index) => (
-              <div key={index} className="space-y-4 rounded-md border p-4">
+            {value.stages.map((stage, stageIndex) => (
+              <div key={stageIndex} className="space-y-4 rounded-md border p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
-                    {t("stageNumber", { number: index + 1 })}
+                    {t("stageNumber", { number: stageIndex + 1 })}
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => removeStage(index)}
+                    onClick={() => removeStage(stageIndex)}
                     className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -380,7 +538,7 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
                       placeholder={t("stageNamePlaceholder")}
                       value={stage.name}
                       onChange={(e) =>
-                        updateStage(index, { name: e.target.value })
+                        updateStage(stageIndex, { name: e.target.value })
                       }
                     />
                   </div>
@@ -389,7 +547,7 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
                     <Select
                       value={stage.strategy}
                       onValueChange={(next) =>
-                        updateStage(index, {
+                        updateStage(stageIndex, {
                           strategy: next as StageStrategy,
                         })
                       }
@@ -417,7 +575,7 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
                       placeholder={t("maxParallelPlaceholder")}
                       value={stage.maxParallel}
                       onChange={(e) =>
-                        updateStage(index, { maxParallel: e.target.value })
+                        updateStage(stageIndex, { maxParallel: e.target.value })
                       }
                     />
                   </div>
@@ -431,100 +589,234 @@ export function OrchestrateForm({ value, onChange }: OrchestrateFormProps) {
                     <Switch
                       checked={stage.failFast}
                       onCheckedChange={(checked) =>
-                        updateStage(index, { failFast: checked })
+                        updateStage(stageIndex, { failFast: checked })
                       }
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>{t("targetGroups")}</Label>
-                  <Input
-                    placeholder={t("targetGroupsPlaceholder")}
-                    value={stage.targetGroups}
-                    onChange={(e) =>
-                      updateStage(index, { targetGroups: e.target.value })
-                    }
-                  />
-                </div>
+                <div className="space-y-3 rounded-md border border-dashed p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>{t("stageJobs")}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("stageJobsHint")}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addJob(stageIndex)}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      {t("addJob")}
+                    </Button>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>{t("targetsJson")}</Label>
-                  <Textarea
-                    className="min-h-[120px] font-mono text-sm"
-                    placeholder={t("targetsJsonPlaceholder")}
-                    value={stage.targetsJson}
-                    onChange={(e) =>
-                      updateStage(index, { targetsJson: e.target.value })
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("targetsJsonHint")}
-                  </p>
-                </div>
+                  {stage.jobs.map((job, jobIndex) => (
+                    <div
+                      key={`${stageIndex}-${jobIndex}`}
+                      className="space-y-4 rounded-md border bg-muted/20 p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {t("jobNumber", { number: jobIndex + 1 })}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeJob(stageIndex, jobIndex)}
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
 
-                <div className="space-y-2">
-                  <Label>{t("actionKind")}</Label>
-                  <Select
-                    value={stage.actionKind}
-                    onValueChange={(next) =>
-                      updateStage(index, {
-                        actionKind: next as OrchestrationActionKind,
-                        actionJson: defaultActionJson(
-                          next as OrchestrationActionKind
-                        ),
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tx_block">
-                        {t("actionKindTxBlock")}
-                      </SelectItem>
-                      <SelectItem value="tx_workflow">
-                        {t("actionKindTxWorkflow")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>{t("jobName")}</Label>
+                          <Input
+                            placeholder={t("jobNamePlaceholder")}
+                            value={job.name}
+                            onChange={(e) =>
+                              updateJob(stageIndex, jobIndex, {
+                                name: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("executionStrategy")}</Label>
+                          <Select
+                            value={job.strategy}
+                            onValueChange={(next) =>
+                              updateJob(stageIndex, jobIndex, {
+                                strategy: next as StageStrategy,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="serial">
+                                {t("strategySerial")}
+                              </SelectItem>
+                              <SelectItem value="parallel">
+                                {t("strategyParallel")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
 
-                <div className="space-y-2">
-                  <Label>{t("actionJson")}</Label>
-                  <Textarea
-                    className="min-h-[180px] font-mono text-sm"
-                    placeholder={t("actionJsonPlaceholder")}
-                    value={stage.actionJson}
-                    onChange={(e) =>
-                      updateStage(index, { actionJson: e.target.value })
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("actionJsonHint")}
-                  </p>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>{t("maxParallel")}</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder={t("maxParallelPlaceholder")}
+                            value={job.maxParallel}
+                            onChange={(e) =>
+                              updateJob(stageIndex, jobIndex, {
+                                maxParallel: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between rounded-md border px-4 py-3">
+                          <div className="space-y-0.5">
+                            <Label>{t("jobFailFast")}</Label>
+                            <p className="text-xs text-muted-foreground">
+                              {t("jobFailFastHint")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={job.failFast}
+                            onCheckedChange={(checked) =>
+                              updateJob(stageIndex, jobIndex, {
+                                failFast: checked,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>{t("targetGroups")}</Label>
+                          <Input
+                            placeholder={t("targetGroupsPlaceholder")}
+                            value={job.targetGroups}
+                            onChange={(e) =>
+                              updateJob(stageIndex, jobIndex, {
+                                targetGroups: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("targetTags")}</Label>
+                          <Input
+                            placeholder={t("targetTagsPlaceholder")}
+                            value={job.targetTags}
+                            onChange={(e) =>
+                              updateJob(stageIndex, jobIndex, {
+                                targetTags: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{t("targetsJson")}</Label>
+                        <Textarea
+                          className="min-h-[120px] font-mono text-sm"
+                          placeholder={t("targetsJsonPlaceholder")}
+                          value={job.targetsJson}
+                          onChange={(e) =>
+                            updateJob(stageIndex, jobIndex, {
+                              targetsJson: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("targetsJsonHint")}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{t("actionKind")}</Label>
+                        <Select
+                          value={job.actionKind}
+                          onValueChange={(next) =>
+                            updateJob(stageIndex, jobIndex, {
+                              actionKind: next as OrchestrationActionKind,
+                              actionJson: defaultActionJson(
+                                next as OrchestrationActionKind,
+                              ),
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="tx_block">
+                              {t("actionKindTxBlock")}
+                            </SelectItem>
+                            <SelectItem value="tx_workflow">
+                              {t("actionKindTxWorkflow")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{t("actionJson")}</Label>
+                        <Textarea
+                          className="min-h-[180px] font-mono text-sm"
+                          placeholder={t("actionJsonPlaceholder")}
+                          value={job.actionJson}
+                          onChange={(e) =>
+                            updateJob(stageIndex, jobIndex, {
+                              actionJson: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("actionJsonHint")}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addStage}
-              className="w-full"
-            >
-              <Plus className="mr-1 h-3 w-3" />
-              {t("addStage")}
-            </Button>
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addStage}
+            className="w-full"
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            {t("addStage")}
+          </Button>
         </div>
       )}
     </div>
   );
 }
 
-export function buildOrchestratePayload(data: OrchestrateFormData): Record<string, unknown> {
+export function buildOrchestratePayload(
+  data: OrchestrateFormData,
+): Record<string, unknown> {
   const plan = data.useRawJson
     ? (() => {
         try {
@@ -543,7 +835,7 @@ export function buildOrchestratePayload(data: OrchestrateFormData): Record<strin
 
 export function validateOrchestrateForm(
   data: OrchestrateFormData,
-  t: (key: string, params?: Record<string, string | number | Date>) => string
+  t: (key: string, params?: Record<string, string | number | Date>) => string,
 ): string | null {
   if (data.useRawJson) {
     if (!data.rawJson.trim()) {
@@ -588,10 +880,6 @@ export function validateOrchestrateForm(
       return t("stageNameEmpty", { number: i + 1 });
     }
 
-    if (!stage.targetGroups.trim() && !stage.targetsJson.trim()) {
-      return t("stageNeedsTargetSelector", { number: i + 1 });
-    }
-
     if (
       stage.maxParallel.trim() &&
       parseOptionalPositiveInt(stage.maxParallel) === undefined
@@ -599,64 +887,88 @@ export function validateOrchestrateForm(
       return t("positiveIntegerRequired");
     }
 
-    if (stage.targetsJson.trim()) {
-      try {
-        const parsed = JSON.parse(stage.targetsJson);
-        if (!Array.isArray(parsed)) {
+    if (stage.jobs.length === 0) {
+      return t("stageNeedsAtLeastOneJob", { number: i + 1 });
+    }
+
+    for (let j = 0; j < stage.jobs.length; j += 1) {
+      const job = stage.jobs[j];
+      const jobNumber = `${i + 1}.${j + 1}`;
+
+      if (
+        !job.targetGroups.trim() &&
+        !job.targetTags.trim() &&
+        !job.targetsJson.trim()
+      ) {
+        return t("stageNeedsTargetSelector", { number: jobNumber });
+      }
+
+      if (
+        job.maxParallel.trim() &&
+        parseOptionalPositiveInt(job.maxParallel) === undefined
+      ) {
+        return t("positiveIntegerRequired");
+      }
+
+      if (job.targetsJson.trim()) {
+        try {
+          const parsed = JSON.parse(job.targetsJson);
+          if (!Array.isArray(parsed)) {
+            return t("invalidTargetsJson");
+          }
+        } catch {
           return t("invalidTargetsJson");
         }
+      }
+
+      if (!job.actionJson.trim()) {
+        return t("actionJsonRequired", { number: jobNumber });
+      }
+
+      try {
+        const parsed = JSON.parse(job.actionJson) as Record<string, unknown>;
+
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return t("invalidActionJson", { number: jobNumber });
+        }
+
+        if (job.actionKind === "tx_block") {
+          const hasTemplate = hasNonEmptyString(parsed.template);
+          const hasCommands =
+            Array.isArray(parsed.commands) &&
+            parsed.commands.some((item) => hasNonEmptyString(item));
+
+          if (!hasTemplate && !hasCommands) {
+            return t("orchestrateTxBlockActionNeedsCommandsOrTemplate", {
+              number: jobNumber,
+            });
+          }
+
+          if (
+            parsed.rollback_trigger_step_index !== undefined &&
+            parsed.rollback_trigger_step_index !== null &&
+            !hasNonEmptyString(parsed.resource_rollback_command)
+          ) {
+            return t("txBlockRollbackTriggerRequiresResourceRollback");
+          }
+        }
+
+        if (job.actionKind === "tx_workflow") {
+          const hasWorkflowFile = hasNonEmptyString(parsed.workflow_file);
+          const hasWorkflow =
+            Object.prototype.hasOwnProperty.call(parsed, "workflow") &&
+            parsed.workflow !== null &&
+            parsed.workflow !== undefined;
+
+          if (hasWorkflowFile === hasWorkflow) {
+            return t("orchestrateWorkflowActionRequiresExactlyOneSource", {
+              number: jobNumber,
+            });
+          }
+        }
       } catch {
-        return t("invalidTargetsJson");
+        return t("invalidActionJson", { number: jobNumber });
       }
-    }
-
-    if (!stage.actionJson.trim()) {
-      return t("actionJsonRequired", { number: i + 1 });
-    }
-
-    try {
-      const parsed = JSON.parse(stage.actionJson) as Record<string, unknown>;
-
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return t("invalidActionJson", { number: i + 1 });
-      }
-
-      if (stage.actionKind === "tx_block") {
-        const hasTemplate = hasNonEmptyString(parsed.template);
-        const hasCommands =
-          Array.isArray(parsed.commands) &&
-          parsed.commands.some((item) => hasNonEmptyString(item));
-
-        if (!hasTemplate && !hasCommands) {
-          return t("orchestrateTxBlockActionNeedsCommandsOrTemplate", {
-            number: i + 1,
-          });
-        }
-
-        if (
-          parsed.rollback_trigger_step_index !== undefined &&
-          parsed.rollback_trigger_step_index !== null &&
-          !hasNonEmptyString(parsed.resource_rollback_command)
-        ) {
-          return t("txBlockRollbackTriggerRequiresResourceRollback");
-        }
-      }
-
-      if (stage.actionKind === "tx_workflow") {
-        const hasWorkflowFile = hasNonEmptyString(parsed.workflow_file);
-        const hasWorkflow =
-          Object.prototype.hasOwnProperty.call(parsed, "workflow") &&
-          parsed.workflow !== null &&
-          parsed.workflow !== undefined;
-
-        if (hasWorkflowFile === hasWorkflow) {
-          return t("orchestrateWorkflowActionRequiresExactlyOneSource", {
-            number: i + 1,
-          });
-        }
-      }
-    } catch {
-      return t("invalidActionJson", { number: i + 1 });
     }
   }
 
@@ -666,6 +978,8 @@ export function validateOrchestrateForm(
 export const defaultOrchestrateFormData: OrchestrateFormData = {
   name: "",
   failFast: true,
+  rollbackOnStageFailure: false,
+  rollbackCompletedStagesOnFailure: false,
   inventoryFile: "",
   inventoryJson: "",
   baseDir: "",

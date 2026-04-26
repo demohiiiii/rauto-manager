@@ -4,7 +4,10 @@ import {
   testConnectionOverGrpc,
 } from "@/lib/agent-task-grpc";
 import { prisma } from "@/lib/prisma";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import {
+  buildConnectionPayloadFromInput,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 
 const TEST_TIMEOUT_MS = 30000;
 
@@ -18,25 +21,26 @@ const TEST_TIMEOUT_MS = 30000;
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
+    const connection = buildConnectionPayloadFromInput(body);
 
     const agent = await prisma.agent.findUnique({ where: { id } });
 
     if (!agent) {
       return NextResponse.json(
         { success: false, error: "Agent 不存在" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         { success: false, error: "Agent 当前不在线" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -45,15 +49,7 @@ export async function POST(
         const result = await testConnectionOverGrpc({
           agent: { host: agent.host, port: agent.port, reportMode: "grpc" },
           timeoutMs: TEST_TIMEOUT_MS,
-          connection: {
-            host: body.host,
-            port: body.port ? Number(body.port) : undefined,
-            username: body.username,
-            password: body.password,
-            enable_password: body.enablePassword || undefined,
-            device_profile: body.deviceProfile,
-            ssh_security: body.sshSecurity || undefined,
-          },
+          connection: connection ?? {},
         });
 
         return NextResponse.json({
@@ -68,7 +64,7 @@ export async function POST(
               error:
                 "当前 agent 尚未实现 gRPC TestConnection RPC，暂时无法测试连接",
             },
-            { status: 501 }
+            { status: 501 },
           );
         }
 
@@ -87,18 +83,10 @@ export async function POST(
           ...(agentToken && { Authorization: `Bearer ${agentToken}` }),
         },
         body: JSON.stringify({
-          connection: {
-            host: body.host,
-            port: body.port ? Number(body.port) : undefined,
-            username: body.username,
-            password: body.password,
-            enable_password: body.enablePassword || undefined,
-            device_profile: body.deviceProfile,
-            ssh_security: body.sshSecurity || undefined,
-          },
+          connection: connection ?? {},
         }),
         signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -108,7 +96,7 @@ export async function POST(
           success: false,
           error: `连接测试失败: ${response.status} ${text}`,
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
@@ -123,10 +111,9 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "连接测试失败",
+        error: error instanceof Error ? error.message : "连接测试失败",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

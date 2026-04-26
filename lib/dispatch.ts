@@ -5,7 +5,12 @@ import {
   normalizeRecordLevel,
 } from "@/lib/record-level";
 import { buildTxBlockJsonFromPayload } from "@/lib/tx-block-serialize";
-import type { AgentReportMode, DispatchType, RecordLevel } from "@/lib/types";
+import type {
+  AgentReportMode,
+  ConnectionPayload,
+  DispatchType,
+  RecordLevel,
+} from "@/lib/types";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
 const ASYNC_DISPATCH_TYPES = new Set<DispatchType>([
@@ -49,8 +54,7 @@ interface AgentDispatchOptions {
   agent: AgentInfo;
   type: DispatchType;
   taskId: string;
-  callbackUrl: string;
-  connection?: Record<string, unknown>;
+  connection?: ConnectionPayload;
   payload: Record<string, unknown>;
   dryRun?: boolean;
   recordLevel?: RecordLevel;
@@ -77,21 +81,12 @@ const RECORD_LEVEL_MAP: Record<RecordLevel, string> = {
 function buildHttpAgentPayload(
   options: AgentDispatchOptions,
 ): Record<string, unknown> {
-  const {
-    type,
-    taskId,
-    callbackUrl,
-    connection,
-    payload,
-    dryRun,
-    recordLevel,
-  } = options;
+  const { type, taskId, connection, payload, dryRun, recordLevel } = options;
   const effectiveRecordLevel =
     normalizeRecordLevel(recordLevel) ?? getDefaultRecordLevelForType(type);
 
   const base: Record<string, unknown> = {
     task_id: taskId,
-    callback_url: callbackUrl,
   };
 
   // Inject connection details for dispatch types that support the connection field

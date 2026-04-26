@@ -37,6 +37,7 @@ import {
   normalizeDeviceProfileModes,
 } from "@/lib/profile-mode";
 import {
+  buildConnectionPayloadFromInput,
   formatAgentConnectionLabel,
   formatAgentReportMode,
   isAgentAvailableStatus,
@@ -338,9 +339,9 @@ export function CreateTaskDialog({
       const payload = buildPayload();
 
       // Build the connection payload
-      const connection = connectionName
-        ? { connection_name: connectionName }
-        : undefined;
+      const connection = buildConnectionPayloadFromInput(selectedConnection, {
+        fallbackConnectionName: connectionName || undefined,
+      });
 
       const result = await apiClient.dispatch({
         type: dispatchType,

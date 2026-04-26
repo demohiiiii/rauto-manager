@@ -4,6 +4,11 @@ import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  JsonObjectEditor,
+  type StructuredJsonObject,
+  toStructuredJsonObject,
+} from "@/components/task-forms/json-structure-editor";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -20,7 +25,7 @@ type TxBlockRollbackMode = "infer" | "per_step" | "whole_resource";
 export interface TxBlockFormData {
   name: string;
   template: string;
-  varsJson: string;
+  vars: StructuredJsonObject;
   commandsText: string;
   rollbackCommandsText: string;
   mode: TxMode;
@@ -88,6 +93,66 @@ function parseOptionalNonNegativeInt(value: string): number | undefined {
   return parsed;
 }
 
+export function parseTxBlockPayloadToFormData(
+  payload: unknown,
+): TxBlockFormData {
+  const normalizedPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+  const rollbackCommands = Array.isArray(normalizedPayload.rollback_commands)
+    ? normalizedPayload.rollback_commands
+        .map((command) => (typeof command === "string" ? command : ""))
+        .join("\n")
+    : "";
+  const hasWholeResourceRollback =
+    typeof normalizedPayload.resource_rollback_command === "string" ||
+    typeof normalizedPayload.rollback_trigger_step_index === "number";
+  const hasPerStepRollback = Array.isArray(normalizedPayload.rollback_commands);
+
+  return {
+    name:
+      typeof normalizedPayload.name === "string" ? normalizedPayload.name : "",
+    template:
+      typeof normalizedPayload.template === "string"
+        ? normalizedPayload.template
+        : "",
+    vars: toStructuredJsonObject(normalizedPayload.vars),
+    commandsText: Array.isArray(normalizedPayload.commands)
+      ? normalizedPayload.commands
+          .filter((command): command is string => typeof command === "string")
+          .join("\n")
+      : "",
+    rollbackCommandsText: rollbackCommands,
+    mode:
+      typeof normalizedPayload.mode === "string"
+        ? normalizedPayload.mode
+        : AUTO_PROFILE_MODE,
+    timeoutSecs:
+      typeof normalizedPayload.timeout_secs === "number"
+        ? String(normalizedPayload.timeout_secs)
+        : "",
+    rollbackMode: hasWholeResourceRollback
+      ? "whole_resource"
+      : hasPerStepRollback
+        ? "per_step"
+        : "infer",
+    rollbackOnFailure: normalizedPayload.rollback_on_failure === true,
+    resourceRollbackCommand:
+      typeof normalizedPayload.resource_rollback_command === "string"
+        ? normalizedPayload.resource_rollback_command
+        : "",
+    rollbackTriggerStepIndex:
+      typeof normalizedPayload.rollback_trigger_step_index === "number"
+        ? String(normalizedPayload.rollback_trigger_step_index)
+        : "",
+    templateProfile:
+      typeof normalizedPayload.template_profile === "string"
+        ? normalizedPayload.template_profile
+        : "",
+  };
+}
+
 export function TxBlockForm({
   value,
   onChange,
@@ -121,7 +186,9 @@ export function TxBlockForm({
           <Label htmlFor="txblock-mode">{t("txBlockMode")}</Label>
           <Select
             value={value.mode}
-            onValueChange={(next) => onChange({ ...value, mode: next as TxMode })}
+            onValueChange={(next) =>
+              onChange({ ...value, mode: next as TxMode })
+            }
             disabled={modeDisabled || modeLoading}
           >
             <SelectTrigger id="txblock-mode">
@@ -186,14 +253,15 @@ export function TxBlockForm({
 
         <div className="space-y-2">
           <Label htmlFor="txblock-vars">{t("txBlockVars")}</Label>
-          <Textarea
-            id="txblock-vars"
-            className="min-h-[120px] font-mono text-sm"
-            placeholder='{"hostname":"core-01"}'
-            value={value.varsJson}
-            onChange={(e) => onChange({ ...value, varsJson: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">{t("txBlockVarsHint")}</p>
+          <div id="txblock-vars">
+            <JsonObjectEditor
+              value={value.vars}
+              onChange={(next) => onChange({ ...value, vars: next })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("txBlockVarsHint")}
+          </p>
         </div>
       </div>
 
@@ -213,7 +281,9 @@ export function TxBlockForm({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="txblock-rollback-mode">{t("txBlockRollbackMode")}</Label>
+          <Label htmlFor="txblock-rollback-mode">
+            {t("txBlockRollbackMode")}
+          </Label>
           <Select
             value={value.rollbackMode}
             onValueChange={(next) =>
@@ -313,7 +383,9 @@ export function TxBlockForm({
   );
 }
 
-export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unknown> {
+export function buildTxBlockPayload(
+  data: TxBlockFormData,
+): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     name: data.name.trim(),
     ...(data.mode !== AUTO_PROFILE_MODE ? { mode: data.mode } : {}),
@@ -324,11 +396,7 @@ export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unkno
     payload.template = template;
   }
 
-  if (data.varsJson.trim()) {
-    payload.vars = JSON.parse(data.varsJson);
-  } else {
-    payload.vars = {};
-  }
+  payload.vars = data.vars;
 
   const commands = parseCommandLines(data.commandsText);
   if (commands.length > 0) {
@@ -351,7 +419,7 @@ export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unkno
 
   if (data.rollbackMode === "per_step") {
     const rollbackCommands = trimTrailingEmpty(
-      parseRollbackLinesRaw(data.rollbackCommandsText)
+      parseRollbackLinesRaw(data.rollbackCommandsText),
     );
     if (rollbackCommands.length > 0) {
       payload.rollback_commands = rollbackCommands;
@@ -365,7 +433,7 @@ export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unkno
     }
 
     const rollbackTriggerStepIndex = parseOptionalNonNegativeInt(
-      data.rollbackTriggerStepIndex
+      data.rollbackTriggerStepIndex,
     );
     if (rollbackTriggerStepIndex !== undefined) {
       payload.rollback_trigger_step_index = rollbackTriggerStepIndex;
@@ -377,18 +445,10 @@ export function buildTxBlockPayload(data: TxBlockFormData): Record<string, unkno
 
 export function validateTxBlockForm(
   data: TxBlockFormData,
-  t: (key: string, params?: Record<string, string | number | Date>) => string
+  t: (key: string, params?: Record<string, string | number | Date>) => string,
 ): string | null {
   if (!data.name.trim()) {
     return t("enterBlockName");
-  }
-
-  if (data.varsJson.trim()) {
-    try {
-      JSON.parse(data.varsJson);
-    } catch {
-      return t("txBlockVarsInvalidJson");
-    }
   }
 
   const commands = parseCommandLines(data.commandsText);
@@ -431,7 +491,7 @@ export function validateTxBlockForm(
 export const defaultTxBlockFormData: TxBlockFormData = {
   name: "",
   template: "",
-  varsJson: "",
+  vars: {},
   commandsText: "",
   rollbackCommandsText: "",
   mode: AUTO_PROFILE_MODE,

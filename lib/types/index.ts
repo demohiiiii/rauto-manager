@@ -41,7 +41,16 @@ export interface AgentConnection {
   name: string;
   host?: string;
   port?: number;
+  username?: string;
+  ssh_security?: string;
   device_profile?: string;
+  linux_shell_flavor?: string;
+  template_dir?: string;
+  enable_password_empty_enter?: boolean;
+  enabled?: boolean;
+  labels?: string[];
+  groups?: string[];
+  vars?: Record<string, unknown>;
   has_password?: boolean;
   default_mode?: string;
   available_modes?: string[];
@@ -265,6 +274,11 @@ export interface ConnectionPayload {
   device_profile?: string;
   linux_shell_flavor?: string;
   template_dir?: string;
+  enable_password_empty_enter?: boolean;
+  enabled?: boolean;
+  labels?: string[];
+  groups?: string[];
+  vars?: Record<string, unknown>;
 }
 
 // Unified dispatch request
@@ -309,14 +323,14 @@ export interface AgentOfflineInput {
 export interface TaskCallbackInput {
   task_id: string;
   agent_name: string;
-  status: "success" | "failed";
+  status: "success" | "failed" | string;
   started_at?: string;
   completed_at?: string;
   execution_time_ms?: number;
-  result?: Record<string, unknown>;
+  result?: unknown;
   result_json?: string | null;
   result_summary_json?: string | null;
-  error?: string;
+  error?: string | null;
 }
 
 export interface TaskExecutionEventInput {
@@ -327,7 +341,8 @@ export interface TaskExecutionEventInput {
   level?: TaskExecutionEventLevel;
   stage?: string;
   progress?: number;
-  details?: Record<string, unknown>;
+  details?: unknown;
+  details_json?: string | null;
   occurred_at?: string;
 }
 

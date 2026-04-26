@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { AUTO_PROFILE_MODE } from "@/lib/profile-mode";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  JsonObjectEditor,
+  type StructuredJsonObject,
+} from "@/components/task-forms/json-structure-editor";
 import {
   Select,
   SelectContent,
@@ -11,14 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 
 export interface TemplateFormData {
   template: string;
-  variables: string;
+  variables: StructuredJsonObject;
   mode: string;
 }
 
@@ -69,17 +71,25 @@ export function TemplateForm({
         if (result.success && result.data?.templates) {
           setTemplates(result.data.templates);
         } else if (!result.success) {
-          toast.error(t("fetchTemplatesFailed", { error: result.error || tc("unknownError") }));
+          toast.error(
+            t("fetchTemplatesFailed", {
+              error: result.error || tc("unknownError"),
+            }),
+          );
         }
       } catch (error) {
-        toast.error(t("fetchTemplatesFailed", { error: error instanceof Error ? error.message : tc("unknownError") }));
+        toast.error(
+          t("fetchTemplatesFailed", {
+            error: error instanceof Error ? error.message : tc("unknownError"),
+          }),
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchTemplates();
-  }, [agentId]);
+  }, [agentId, t, tc]);
 
   return (
     <div className="space-y-4">
@@ -99,7 +109,11 @@ export function TemplateForm({
             disabled={!agentId}
           >
             <SelectTrigger id="template-name">
-              <SelectValue placeholder={agentId ? t("selectTemplate") : t("selectAgentFirst")} />
+              <SelectValue
+                placeholder={
+                  agentId ? t("selectTemplate") : t("selectAgentFirst")
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               {templates.length === 0 ? (
@@ -120,13 +134,12 @@ export function TemplateForm({
 
       <div className="space-y-2">
         <Label htmlFor="template-vars">{t("templateVariables")}</Label>
-        <Textarea
-          id="template-vars"
-          className="font-mono text-sm min-h-[100px]"
-          placeholder='{"hostname": "R1", "interface": "GigabitEthernet0/0"}'
-          value={value.variables}
-          onChange={(e) => onChange({ ...value, variables: e.target.value })}
-        />
+        <div id="template-vars">
+          <JsonObjectEditor
+            value={value.variables}
+            onChange={(next) => onChange({ ...value, variables: next })}
+          />
+        </div>
         <p className="text-xs text-muted-foreground">
           {t("templateVariablesHint")}
         </p>
@@ -158,37 +171,26 @@ export function TemplateForm({
   );
 }
 
-export function buildTemplatePayload(data: TemplateFormData): Record<string, unknown> {
-  let variables: Record<string, unknown> = {};
-  if (data.variables.trim()) {
-    try {
-      variables = JSON.parse(data.variables);
-    } catch {
-      // validateTemplateForm will catch this error
-    }
-  }
-
+export function buildTemplatePayload(
+  data: TemplateFormData,
+): Record<string, unknown> {
   return {
     template: data.template,
-    vars: variables,
+    vars: data.variables,
     ...(data.mode !== AUTO_PROFILE_MODE ? { mode: data.mode } : {}),
   };
 }
 
-export function validateTemplateForm(data: TemplateFormData, t: (key: string) => string): string | null {
+export function validateTemplateForm(
+  data: TemplateFormData,
+  t: (key: string) => string,
+): string | null {
   if (!data.template) return t("selectTemplateRequired");
-  if (data.variables.trim()) {
-    try {
-      JSON.parse(data.variables);
-    } catch {
-      return t("templateVariablesInvalidJson");
-    }
-  }
   return null;
 }
 
 export const defaultTemplateFormData: TemplateFormData = {
   template: "",
-  variables: "",
+  variables: {},
   mode: AUTO_PROFILE_MODE,
 };

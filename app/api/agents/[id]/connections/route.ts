@@ -8,23 +8,66 @@ import {
 import { normalizeDeviceProfileModes } from "@/lib/profile-mode";
 import { prisma } from "@/lib/prisma";
 import type { AgentConnection, DeviceProfileModes } from "@/lib/types";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import {
+  buildConnectionPayloadFromInput,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 
 const CONN_TIMEOUT_MS = 15000;
+
+function normalizeListedConnection(input: unknown): AgentConnection | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const raw = input as Record<string, unknown>;
+  const name =
+    typeof raw.name === "string"
+      ? raw.name.trim()
+      : typeof raw.connection_name === "string"
+        ? raw.connection_name.trim()
+        : "";
+
+  if (!name) {
+    return null;
+  }
+
+  const normalized = buildConnectionPayloadFromInput(raw, {
+    fallbackConnectionName: name,
+  });
+
+  return {
+    name,
+    host: normalized?.host,
+    port: normalized?.port,
+    username: normalized?.username,
+    ssh_security: normalized?.ssh_security,
+    device_profile: normalized?.device_profile?.trim(),
+    linux_shell_flavor: normalized?.linux_shell_flavor,
+    template_dir: normalized?.template_dir,
+    enable_password_empty_enter: normalized?.enable_password_empty_enter,
+    enabled: normalized?.enabled,
+    labels: normalized?.labels,
+    groups: normalized?.groups,
+    vars: normalized?.vars,
+    has_password:
+      typeof raw.has_password === "boolean" ? raw.has_password : undefined,
+  };
+}
 
 async function enrichConnectionsWithProfileModes(
   reportMode: "http" | "grpc",
   host: string,
   port: number,
   connections: AgentConnection[],
-  agentToken: string
+  agentToken: string,
 ): Promise<AgentConnection[]> {
   const uniqueProfiles = Array.from(
     new Set(
       connections
         .map((connection) => connection.device_profile?.trim())
-        .filter((profile): profile is string => Boolean(profile))
-    )
+        .filter((profile): profile is string => Boolean(profile)),
+    ),
   );
 
   if (uniqueProfiles.length === 0) {
@@ -46,19 +89,21 @@ async function enrichConnectionsWithProfileModes(
                   agent: { host, port, reportMode: "grpc" },
                   timeoutMs: CONN_TIMEOUT_MS,
                   name: profile,
-                })) as unknown as DeviceProfileModes
+                })) as unknown as DeviceProfileModes,
               )
             : await (async () => {
                 const response = await fetch(
                   `http://${host}:${port}/api/device-profiles/${encodeURIComponent(
-                    profile
+                    profile,
                   )}/modes`,
                   {
                     headers: {
-                      ...(agentToken && { Authorization: `Bearer ${agentToken}` }),
+                      ...(agentToken && {
+                        Authorization: `Bearer ${agentToken}`,
+                      }),
                     },
                     signal: AbortSignal.timeout(CONN_TIMEOUT_MS),
-                  }
+                  },
                 );
 
                 if (!response.ok) {
@@ -84,7 +129,7 @@ async function enrichConnectionsWithProfileModes(
       } catch {
         // Ignore per-profile failures so a single bad profile does not break the list.
       }
-    })
+    }),
   );
 
   return connections.map((connection) => {
@@ -92,9 +137,7 @@ async function enrichConnectionsWithProfileModes(
     const summary = profile ? profileModesByName.get(profile) : undefined;
 
     if (!summary) {
-      return profile
-        ? { ...connection, device_profile: profile }
-        : connection;
+      return profile ? { ...connection, device_profile: profile } : connection;
     }
 
     return {
@@ -115,7 +158,7 @@ async function enrichConnectionsWithProfileModes(
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -125,14 +168,14 @@ export async function GET(
     if (!agent) {
       return NextResponse.json(
         { success: false, error: "Agent 不存在" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         { success: false, error: "Agent 当前不在线" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -144,27 +187,26 @@ export async function GET(
         });
 
         const connections = Array.isArray(result.connections)
-          ? result.connections.map((connection) => ({
-              ...connection,
-              device_profile: connection.device_profile?.trim(),
-            }))
+          ? result.connections
+              .map((connection) => normalizeListedConnection(connection))
+              .filter((connection): connection is AgentConnection =>
+                Boolean(connection),
+              )
           : [];
         const enrichedConnections = await enrichConnectionsWithProfileModes(
           "grpc",
           agent.host,
           agent.port,
           connections,
-          ""
+          "",
         );
 
-        return NextResponse.json(
-          {
-            success: true,
-            data: {
-              connections: enrichedConnections,
-            },
+        return NextResponse.json({
+          success: true,
+          data: {
+            connections: enrichedConnections,
           },
-        );
+        });
       } catch (error) {
         if (isGrpcMethodUnavailable(error)) {
           return NextResponse.json(
@@ -173,7 +215,7 @@ export async function GET(
               error:
                 "当前 agent 尚未实现 gRPC ListConnections RPC，暂时无法获取已保存连接列表",
             },
-            { status: 501 }
+            { status: 501 },
           );
         }
 
@@ -190,7 +232,7 @@ export async function GET(
           ...(agentToken && { Authorization: `Bearer ${agentToken}` }),
         },
         signal: AbortSignal.timeout(CONN_TIMEOUT_MS),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -200,18 +242,27 @@ export async function GET(
           success: false,
           error: `Agent 返回错误: ${response.status} ${text}`,
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
     const data = await response.json();
-    const connections = Array.isArray(data) ? data : data.connections ?? [];
+    const rawConnections = Array.isArray(data)
+      ? data
+      : (data.connections ?? []);
+    const connections = Array.isArray(rawConnections)
+      ? rawConnections
+          .map((connection) => normalizeListedConnection(connection))
+          .filter((connection): connection is AgentConnection =>
+            Boolean(connection),
+          )
+      : [];
     const enrichedConnections = await enrichConnectionsWithProfileModes(
       "http",
       agent.host,
       agent.port,
       connections,
-      agentToken
+      agentToken,
     );
 
     return NextResponse.json({
@@ -222,10 +273,9 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "获取连接列表失败",
+        error: error instanceof Error ? error.message : "获取连接列表失败",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -240,16 +290,22 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
+    const connectionNameValue = typeof body.name === "string" ? body.name : "";
+    const savePassword =
+      typeof body.savePassword === "boolean" ? body.savePassword : true;
+    const connection = buildConnectionPayloadFromInput(body, {
+      fallbackConnectionName: connectionNameValue || undefined,
+    });
 
-    if (!body.name) {
+    if (!connectionNameValue) {
       return NextResponse.json(
         { success: false, error: "缺少连接名称 (name)" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -258,14 +314,14 @@ export async function PUT(
     if (!agent) {
       return NextResponse.json(
         { success: false, error: "Agent 不存在" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (!isAgentAvailableStatus(agent.status)) {
       return NextResponse.json(
         { success: false, error: "Agent 当前不在线" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -274,18 +330,9 @@ export async function PUT(
         const result = await upsertConnectionOverGrpc({
           agent: { host: agent.host, port: agent.port, reportMode: "grpc" },
           timeoutMs: CONN_TIMEOUT_MS,
-          name: body.name,
-          connection: {
-            connection_name: body.name,
-            host: body.host,
-            port: body.port ? Number(body.port) : undefined,
-            username: body.username,
-            password: body.password,
-            enable_password: body.enablePassword || undefined,
-            device_profile: body.deviceProfile,
-            ssh_security: body.sshSecurity || undefined,
-          },
-          savePassword: body.savePassword ?? true,
+          name: connectionNameValue,
+          connection: connection ?? {},
+          savePassword,
         });
 
         return NextResponse.json({
@@ -300,7 +347,7 @@ export async function PUT(
               error:
                 "当前 agent 尚未实现 gRPC UpsertConnection RPC，暂时无法保存连接",
             },
-            { status: 501 }
+            { status: 501 },
           );
         }
 
@@ -309,7 +356,7 @@ export async function PUT(
     }
 
     const agentToken = process.env.AGENT_API_KEY || "";
-    const connectionName = encodeURIComponent(body.name);
+    const connectionName = encodeURIComponent(connectionNameValue);
 
     const response = await fetch(
       `http://${agent.host}:${agent.port}/api/connections/${connectionName}`,
@@ -320,20 +367,11 @@ export async function PUT(
           ...(agentToken && { Authorization: `Bearer ${agentToken}` }),
         },
         body: JSON.stringify({
-          connection: {
-            connection_name: body.name,
-            host: body.host,
-            port: body.port ? Number(body.port) : undefined,
-            username: body.username,
-            password: body.password,
-            enable_password: body.enablePassword || undefined,
-            device_profile: body.deviceProfile,
-            ssh_security: body.sshSecurity || undefined,
-          },
-          save_password: body.savePassword ?? true,
+          connection: connection ?? {},
+          save_password: savePassword,
         }),
         signal: AbortSignal.timeout(CONN_TIMEOUT_MS),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -343,7 +381,7 @@ export async function PUT(
           success: false,
           error: `保存连接到 Agent 失败: ${response.status} ${text}`,
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
@@ -357,10 +395,9 @@ export async function PUT(
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "保存连接失败",
+        error: error instanceof Error ? error.message : "保存连接失败",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

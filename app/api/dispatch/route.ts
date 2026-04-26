@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ApiResponse, DispatchRequest, DispatchType } from "@/lib/types";
+import type {
+  ApiResponse,
+  ConnectionPayload,
+  DispatchRequest,
+  DispatchType,
+} from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { dispatchToAgent, isAsyncDispatchType } from "@/lib/dispatch";
@@ -11,7 +16,10 @@ import {
 import { createNotification } from "@/lib/notification";
 import { getSystemTranslator } from "@/app/api/utils/i18n";
 import { hasTxBlockDispatchInput } from "@/lib/tx-block-serialize";
-import { isAgentAvailableStatus } from "@/lib/utils";
+import {
+  buildConnectionPayloadFromInput,
+  isAgentAvailableStatus,
+} from "@/lib/utils";
 
 const VALID_TYPES: DispatchType[] = [
   "exec",
@@ -119,9 +127,12 @@ export async function POST(request: NextRequest) {
     const effectiveRecordLevel =
       normalizeRecordLevel(body.record_level) ??
       getDefaultRecordLevelForType(body.type);
+    const normalizedConnection = buildConnectionPayloadFromInput(
+      body.connection as Record<string, unknown> | undefined,
+    );
     const storedPayload: Record<string, unknown> = {
       ...body.payload,
-      ...(body.connection ? { connection: body.connection } : {}),
+      ...(normalizedConnection ? { connection: normalizedConnection } : {}),
       ...(body.dry_run !== undefined ? { dry_run: body.dry_run } : {}),
       record_level: effectiveRecordLevel,
     };
@@ -159,12 +170,6 @@ export async function POST(request: NextRequest) {
       return createdTask;
     });
 
-    // Build the callback URL from the current request origin
-    const callbackUrl = new URL(
-      "/api/agents/report-task-callback",
-      request.nextUrl.origin,
-    ).toString();
-
     try {
       // Call the agent
       const dispatchResult = await dispatchToAgent({
@@ -175,8 +180,7 @@ export async function POST(request: NextRequest) {
         },
         type: body.type,
         taskId: task.id,
-        callbackUrl,
-        connection: body.connection as Record<string, unknown> | undefined,
+        connection: normalizedConnection as ConnectionPayload | undefined,
         payload: body.payload as Record<string, unknown>,
         dryRun: body.dry_run,
         recordLevel: effectiveRecordLevel,

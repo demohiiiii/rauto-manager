@@ -13,7 +13,7 @@ export function normalizeRecordLevel(value: unknown): RecordLevel | undefined {
     return "Full";
   }
 
-  if (value === "KeyEventsOnly" || value === "Off") {
+  if (value === "KeyEventsOnly") {
     return "KeyEventsOnly";
   }
 

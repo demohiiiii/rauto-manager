@@ -3,6 +3,7 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import { normalizeRecordLevel } from "@/lib/record-level";
 import { buildTxBlockJsonFromPayload } from "@/lib/tx-block-serialize";
+import { buildConnectionPayloadFromInput } from "@/lib/utils";
 import type {
   AgentReportMode,
   ConnectionPayload,
@@ -50,7 +51,7 @@ interface GrpcDispatchOptions {
   agent: GrpcAgentInfo;
   type: DispatchType;
   taskId: string;
-  connection?: Record<string, unknown>;
+  connection?: ConnectionPayload;
   payload: Record<string, unknown>;
   dryRun?: boolean;
   recordLevel?: string;
@@ -151,45 +152,53 @@ function toOptionalBoolean(value: unknown): boolean {
 }
 
 function mapConnectionRef(
-  connection?: Record<string, unknown>,
-): ConnectionPayload | undefined {
-  if (!connection || !isRecord(connection)) {
+  connection?: ConnectionPayload | Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!isRecord(connection)) {
     return undefined;
   }
 
-  const mapped: ConnectionPayload = {};
+  const normalized = buildConnectionPayloadFromInput(connection);
 
-  if (typeof connection.connection_name === "string") {
-    mapped.connection_name = connection.connection_name;
+  if (!normalized) {
+    return undefined;
   }
-  if (typeof connection.host === "string") {
-    mapped.host = connection.host;
-  }
-  if (typeof connection.username === "string") {
-    mapped.username = connection.username;
-  }
-  if (typeof connection.password === "string") {
-    mapped.password = connection.password;
-  }
-  if (
-    typeof connection.port === "number" &&
-    Number.isInteger(connection.port) &&
-    connection.port > 0
-  ) {
-    mapped.port = connection.port;
-  }
-  if (typeof connection.enable_password === "string") {
-    mapped.enable_password = connection.enable_password;
-  }
-  if (typeof connection.ssh_security === "string") {
-    mapped.ssh_security = connection.ssh_security;
-  }
-  if (typeof connection.device_profile === "string") {
-    mapped.device_profile = connection.device_profile;
-  }
-  if (typeof connection.linux_shell_flavor === "string") {
-    mapped.linux_shell_flavor = connection.linux_shell_flavor;
-  }
+
+  const mapped: Record<string, unknown> = {
+    ...(normalized.connection_name
+      ? { connection_name: normalized.connection_name }
+      : {}),
+    ...(normalized.host ? { host: normalized.host } : {}),
+    ...(normalized.username ? { username: normalized.username } : {}),
+    ...(normalized.password ? { password: normalized.password } : {}),
+    ...(normalized.port !== undefined ? { port: normalized.port } : {}),
+    ...(normalized.enable_password
+      ? { enable_password: normalized.enable_password }
+      : {}),
+    ...(normalized.ssh_security
+      ? { ssh_security: normalized.ssh_security }
+      : {}),
+    ...(normalized.device_profile
+      ? { device_profile: normalized.device_profile }
+      : {}),
+    ...(normalized.linux_shell_flavor
+      ? { linux_shell_flavor: normalized.linux_shell_flavor }
+      : {}),
+    ...(normalized.template_dir
+      ? { template_dir: normalized.template_dir }
+      : {}),
+    ...(normalized.enable_password_empty_enter !== undefined
+      ? {
+          enable_password_empty_enter: normalized.enable_password_empty_enter,
+        }
+      : {}),
+    ...(normalized.enabled !== undefined
+      ? { enabled: normalized.enabled }
+      : {}),
+    ...(normalized.labels?.length ? { labels: normalized.labels } : {}),
+    ...(normalized.groups?.length ? { groups: normalized.groups } : {}),
+    ...(normalized.vars ? { vars_json: JSON.stringify(normalized.vars) } : {}),
+  };
 
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 }
@@ -380,7 +389,7 @@ export async function upsertConnectionOverGrpc(options: {
   agent: GrpcAgentInfo;
   timeoutMs: number;
   name: string;
-  connection: Record<string, unknown>;
+  connection: ConnectionPayload | Record<string, unknown>;
   savePassword?: boolean;
 }): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
@@ -399,7 +408,7 @@ export async function upsertConnectionOverGrpc(options: {
 export async function testConnectionOverGrpc(options: {
   agent: GrpcAgentInfo;
   timeoutMs: number;
-  connection: Record<string, unknown>;
+  connection: ConnectionPayload | Record<string, unknown>;
 }): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(
