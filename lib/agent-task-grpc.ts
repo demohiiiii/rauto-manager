@@ -29,8 +29,19 @@ type GrpcDispatchMethod =
   | "UpsertConnection"
   | "TestConnection"
   | "ListTemplates"
+  | "GetTemplate"
+  | "CreateTemplate"
   | "ListDeviceProfiles"
   | "ListProfileModes"
+  | "ListTxBlockTemplates"
+  | "GetTxBlockTemplate"
+  | "CreateTxBlockTemplate"
+  | "ListTxWorkflowTemplates"
+  | "GetTxWorkflowTemplate"
+  | "CreateTxWorkflowTemplate"
+  | "ListOrchestrationTemplates"
+  | "GetOrchestrationTemplate"
+  | "CreateOrchestrationTemplate"
   | "ProbeDevices"
   | "ExecuteCommand"
   | "ExecuteTemplate"
@@ -240,14 +251,19 @@ function buildGrpcRequest(options: GrpcDispatchOptions): {
     case "tx_block":
       const hasCommands =
         Array.isArray(payload.commands) && payload.commands.length > 0;
+      const hasStructuredTxBlock =
+        payload.tx_block &&
+        typeof payload.tx_block === "object" &&
+        !Array.isArray(payload.tx_block);
       return {
         method,
         request: {
           task_id: taskId,
           tx_block_json: buildTxBlockJsonFromPayload(payload),
-          tx_block_template_name: hasCommands
-            ? ""
-            : toOptionalString(payload.template),
+          tx_block_template_name:
+            hasCommands || hasStructuredTxBlock
+              ? ""
+              : toOptionalString(payload.template),
           tx_block_template_content: toOptionalString(payload.template_content),
           tx_block_template_vars_json: stringifyJson(payload.vars ?? {}),
           dry_run: dryRun ?? false,
@@ -426,6 +442,87 @@ export async function listTemplatesOverGrpc(
 ): Promise<GrpcResponsePayload> {
   const client = createClient(`${options.agent.host}:${options.agent.port}`);
   return callUnaryMethod(client, "ListTemplates", {}, options.timeoutMs);
+}
+
+export type AgentTemplateKind =
+  | "template"
+  | "tx_block"
+  | "tx_workflow"
+  | "orchestrate";
+
+const TEMPLATE_GRPC_METHODS: Record<
+  AgentTemplateKind,
+  {
+    list: GrpcDispatchMethod;
+    get: GrpcDispatchMethod;
+    create: GrpcDispatchMethod;
+  }
+> = {
+  template: {
+    list: "ListTemplates",
+    get: "GetTemplate",
+    create: "CreateTemplate",
+  },
+  tx_block: {
+    list: "ListTxBlockTemplates",
+    get: "GetTxBlockTemplate",
+    create: "CreateTxBlockTemplate",
+  },
+  tx_workflow: {
+    list: "ListTxWorkflowTemplates",
+    get: "GetTxWorkflowTemplate",
+    create: "CreateTxWorkflowTemplate",
+  },
+  orchestrate: {
+    list: "ListOrchestrationTemplates",
+    get: "GetOrchestrationTemplate",
+    create: "CreateOrchestrationTemplate",
+  },
+};
+
+export async function listAgentTemplatesOverGrpc(options: {
+  agent: GrpcAgentInfo;
+  timeoutMs: number;
+  kind: AgentTemplateKind;
+}): Promise<GrpcResponsePayload> {
+  const client = createClient(`${options.agent.host}:${options.agent.port}`);
+  return callUnaryMethod(
+    client,
+    TEMPLATE_GRPC_METHODS[options.kind].list,
+    {},
+    options.timeoutMs,
+  );
+}
+
+export async function getAgentTemplateOverGrpc(options: {
+  agent: GrpcAgentInfo;
+  timeoutMs: number;
+  kind: AgentTemplateKind;
+  name: string;
+}): Promise<GrpcResponsePayload> {
+  const client = createClient(`${options.agent.host}:${options.agent.port}`);
+  return callUnaryMethod(
+    client,
+    TEMPLATE_GRPC_METHODS[options.kind].get,
+    { name: options.name },
+    options.timeoutMs,
+  );
+}
+
+export async function createAgentTemplateOverGrpc(options: {
+  agent: GrpcAgentInfo;
+  timeoutMs: number;
+  kind: AgentTemplateKind;
+  name: string;
+  content: string;
+}): Promise<GrpcResponsePayload> {
+  const client = createClient(`${options.agent.host}:${options.agent.port}`);
+  return callUnaryMethod(
+    client,
+    TEMPLATE_GRPC_METHODS[options.kind].create,
+    { name: options.name, content: options.content },
+    options.timeoutMs,
+  );
 }
 
 export async function listDeviceProfilesOverGrpc(

@@ -10,10 +10,21 @@ service AgentTaskService {
   rpc UpsertConnection(UpsertConnectionRequest) returns (UpsertConnectionResponse);
   rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetTemplate(GetTemplateRequest) returns (TemplateDetail);
+  rpc CreateTemplate(CreateTemplateRequest) returns (TemplateDetail);
   rpc ListCommandFlowTemplates(ListCommandFlowTemplatesRequest) returns (ListCommandFlowTemplatesResponse);
   rpc GetCommandFlowTemplate(GetCommandFlowTemplateRequest) returns (CommandFlowTemplateDetail);
   rpc UpsertCommandFlowTemplate(UpsertCommandFlowTemplateRequest) returns (CommandFlowTemplateDetail);
   rpc DeleteCommandFlowTemplate(DeleteCommandFlowTemplateRequest) returns (DeleteCommandFlowTemplateResponse);
+  rpc ListTxBlockTemplates(ListTxBlockTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetTxBlockTemplate(GetTemplateRequest) returns (TemplateDetail);
+  rpc CreateTxBlockTemplate(CreateTemplateRequest) returns (TemplateDetail);
+  rpc ListTxWorkflowTemplates(ListTxWorkflowTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetTxWorkflowTemplate(GetTemplateRequest) returns (TemplateDetail);
+  rpc CreateTxWorkflowTemplate(CreateTemplateRequest) returns (TemplateDetail);
+  rpc ListOrchestrationTemplates(ListOrchestrationTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetOrchestrationTemplate(GetTemplateRequest) returns (TemplateDetail);
+  rpc CreateOrchestrationTemplate(CreateTemplateRequest) returns (TemplateDetail);
   rpc ListDeviceProfiles(ListDeviceProfilesRequest) returns (ListDeviceProfilesResponse);
   rpc ListProfileModes(ListProfileModesRequest) returns (ListProfileModesResponse);
   rpc ExecuteCommand(ExecuteCommandRequest) returns (ExecuteCommandResponse);
@@ -101,19 +112,43 @@ message TestConnectionResponse {
 message ListTemplatesRequest {}
 
 message TemplateMeta {
-  string name = 1;
-  string path = 2;
+  string name          = 1;
+  string kind          = 2;
+  string source        = 3;
+  string content_type  = 4;
+  uint64 size_bytes    = 5;
+  int64  created_at_ms = 6;
+  int64  updated_at_ms = 7;
 }
 
 message ListTemplatesResponse {
   repeated TemplateMeta templates = 1;
 }
 
+message GetTemplateRequest {
+  string name = 1;
+}
+
+message TemplateDetail {
+  string name    = 1;
+  string content = 2;
+}
+
+message CreateTemplateRequest {
+  string name    = 1;
+  string content = 2;
+}
+
 message ListCommandFlowTemplatesRequest {}
 
 message CommandFlowTemplateMeta {
-  string name = 1;
-  string path = 2;
+  string name          = 1;
+  string kind          = 2;
+  string source        = 3;
+  string content_type  = 4;
+  uint64 size_bytes    = 5;
+  int64  created_at_ms = 6;
+  int64  updated_at_ms = 7;
 }
 
 message ListCommandFlowTemplatesResponse {
@@ -137,9 +172,8 @@ message CommandFlowTemplateVarField {
 
 message CommandFlowTemplateDetail {
   string                               name        = 1;
-  string                               path        = 2;
-  string                               content     = 3;
-  repeated CommandFlowTemplateVarField vars_schema = 4;
+  string                               content     = 2;
+  repeated CommandFlowTemplateVarField vars_schema = 3;
 }
 
 message UpsertCommandFlowTemplateRequest {
@@ -154,6 +188,12 @@ message DeleteCommandFlowTemplateRequest {
 message DeleteCommandFlowTemplateResponse {
   bool ok = 1;
 }
+
+message ListTxBlockTemplatesRequest {}
+
+message ListTxWorkflowTemplatesRequest {}
+
+message ListOrchestrationTemplatesRequest {}
 
 message ListDeviceProfilesRequest {}
 

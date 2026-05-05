@@ -2,6 +2,9 @@ import axios, { AxiosInstance, isAxiosError } from "axios";
 import type {
   Agent,
   AgentConnection,
+  AgentTemplateDetail,
+  AgentTemplateKind,
+  AgentTemplateMeta,
   AgentLiveInfo,
   DeviceProfileModes,
   Device,
@@ -12,6 +15,7 @@ import type {
   ExecutionHistoryRecord,
   ExecutionHistoryStats,
   GlobalSearchResults,
+  ManagerTemplate,
 } from "@/lib/types";
 
 class ApiClient {
@@ -37,7 +41,7 @@ class ApiClient {
         }
         // Keep throwing when there is no response body, such as a network failure
         throw error;
-      }
+      },
     );
   }
 
@@ -59,7 +63,7 @@ class ApiClient {
 
   async updateAgent(
     id: string,
-    agent: Partial<Agent>
+    agent: Partial<Agent>,
   ): Promise<ApiResponse<Agent>> {
     const { data } = await this.client.put(`/agents/${id}`, agent);
     return data;
@@ -136,14 +140,16 @@ class ApiClient {
     return data;
   }
 
-  async getExecutionHistory(filters: {
-    search?: string;
-    status?: "success" | "failed";
-    agentId?: string;
-    range?: "all" | "24h" | "7d" | "30d";
-    page?: number;
-    limit?: number;
-  } = {}): Promise<
+  async getExecutionHistory(
+    filters: {
+      search?: string;
+      status?: "success" | "failed";
+      agentId?: string;
+      range?: "all" | "24h" | "7d" | "30d";
+      page?: number;
+      limit?: number;
+    } = {},
+  ): Promise<
     ApiResponse<{
       records: ExecutionHistoryRecord[];
       stats: ExecutionHistoryStats;
@@ -159,28 +165,104 @@ class ApiClient {
   }
 
   // Dispatch API
-  async dispatch(body: Record<string, unknown>): Promise<ApiResponse<TaskDispatchResponse>> {
+  async dispatch(
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<TaskDispatchResponse>> {
     const { data } = await this.client.post("/dispatch", body);
     return data;
   }
 
   // Agent Connections & Templates
-  async getAgentConnections(agentId: string): Promise<ApiResponse<{ connections: AgentConnection[] }>> {
+  async getAgentConnections(
+    agentId: string,
+  ): Promise<ApiResponse<{ connections: AgentConnection[] }>> {
     const { data } = await this.client.get(`/agents/${agentId}/connections`);
     return data;
   }
 
-  async getAgentTemplates(agentId: string): Promise<ApiResponse<{ templates: Array<{ name: string; path: string }> }>> {
-    const { data } = await this.client.get(`/agents/${agentId}/templates`);
+  async getAgentTemplates(
+    agentId: string,
+    kind: AgentTemplateKind = "template",
+  ): Promise<ApiResponse<{ templates: AgentTemplateMeta[] }>> {
+    const { data } = await this.client.get(`/agents/${agentId}/templates`, {
+      params: { kind },
+    });
+    return data;
+  }
+
+  async getAgentTemplate(
+    agentId: string,
+    kind: AgentTemplateKind,
+    name: string,
+  ): Promise<ApiResponse<{ template: AgentTemplateDetail }>> {
+    const { data } = await this.client.get(
+      `/agents/${agentId}/templates/${encodeURIComponent(name)}`,
+      { params: { kind } },
+    );
+    return data;
+  }
+
+  async createAgentTemplate(
+    agentId: string,
+    kind: AgentTemplateKind,
+    input: { name: string; content: string },
+  ): Promise<ApiResponse<{ template: AgentTemplateDetail }>> {
+    const { data } = await this.client.post(
+      `/agents/${agentId}/templates`,
+      input,
+      {
+        params: { kind },
+      },
+    );
+    return data;
+  }
+
+  async getManagerTemplates(
+    kind?: AgentTemplateKind,
+  ): Promise<ApiResponse<{ templates: ManagerTemplate[] }>> {
+    const { data } = await this.client.get("/templates", {
+      params: { kind },
+    });
+    return data;
+  }
+
+  async saveManagerTemplate(input: {
+    kind: AgentTemplateKind;
+    name: string;
+    content: string;
+  }): Promise<ApiResponse<{ template: ManagerTemplate }>> {
+    const { data } = await this.client.post("/templates", input);
+    return data;
+  }
+
+  async syncTemplatesFromAgent(input: {
+    agentId: string;
+    kind: AgentTemplateKind;
+    names?: string[];
+  }): Promise<ApiResponse<{ templates: ManagerTemplate[]; count: number }>> {
+    const { data } = await this.client.post(
+      "/templates/sync-from-agent",
+      input,
+    );
+    return data;
+  }
+
+  async pushManagerTemplateToAgent(
+    templateId: string,
+    agentId: string,
+  ): Promise<ApiResponse<{ template: AgentTemplateDetail }>> {
+    const { data } = await this.client.post(`/templates/${templateId}/push`, {
+      agentId,
+    });
     return data;
   }
 
   async getAgentDeviceProfileModes(
     agentId: string,
-    profile: string
+    profile: string,
   ): Promise<ApiResponse<DeviceProfileModes>> {
     const { data } = await this.client.get(
-      `/agents/${agentId}/device-profiles/${encodeURIComponent(profile)}/modes`
+      `/agents/${agentId}/device-profiles/${encodeURIComponent(profile)}/modes`,
     );
     return data;
   }

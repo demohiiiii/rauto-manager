@@ -1,11 +1,4 @@
-import {
-  ArrowRight,
-  ExternalLink,
-  History,
-  Network,
-  Rocket,
-  Server,
-} from "lucide-react";
+import { ExternalLink, Globe2, Network, Rocket, Server } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -26,12 +19,27 @@ type DocCardItem = {
   badge: string;
   badgeVariant: "default" | "secondary" | "outline";
   external?: boolean;
+  footerLabel?: string;
+  actionLabel?: string;
+  featured?: boolean;
 };
 
 export default async function DocsPage() {
   const t = await getTranslations("docs");
 
   const featuredCards: DocCardItem[] = [
+    {
+      title: "rauto.top",
+      description: t("officialWebsiteDescription"),
+      href: "https://rauto.top",
+      icon: Globe2,
+      badge: t("officialWebsiteBadge"),
+      badgeVariant: "default",
+      external: true,
+      footerLabel: t("officialWebsiteTag"),
+      actionLabel: t("openOfficialWebsite"),
+      featured: true,
+    },
     {
       title: "rauto-manager",
       description: t("managerCardDescription"),
@@ -81,104 +89,55 @@ export default async function DocsPage() {
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]">
-            <a
-              href={featuredCards[0].href}
-              target="_blank"
-              rel="noreferrer"
-              className="block"
-            >
-              <Card className="group h-full overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card shadow-sm transition-colors hover:border-primary/35 hover:bg-accent/30">
-                <CardHeader className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-                      <Rocket className="h-6 w-6" />
-                    </div>
-                    <Badge variant="default">{featuredCards[0].badge}</Badge>
-                  </div>
-                  <div className="space-y-3">
-                    <CardTitle className="text-2xl tracking-tight">{featuredCards[0].title}</CardTitle>
-                    <CardDescription className="max-w-2xl text-sm leading-7 text-foreground/75">
-                      {featuredCards[0].description}
-                    </CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {[
-                      { icon: Rocket, label: t("managerFeatureDeploy") },
-                      { icon: Server, label: t("managerFeatureAgents") },
-                      { icon: History, label: t("managerFeatureHistory") },
-                    ].map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <div
-                          key={item.label}
-                          className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <span className="text-sm font-medium text-foreground/90">{item.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+          <div className="grid items-stretch gap-4 sm:grid-cols-2">
+            {featuredCards.map((item, index) => {
+              const Icon = item.icon;
 
-                  <div className="inline-flex items-center gap-2 text-sm font-medium text-primary">
-                    {t("openExternal")}
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                  </div>
-                </CardContent>
-              </Card>
-            </a>
-
-            <div className="grid gap-4">
-              {featuredCards.slice(1).map((item, index) => {
-                const Icon = item.icon;
-
-                return (
-                  <a
-                    key={item.title}
-                    href={item.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block"
+              return (
+                <a
+                  key={item.title}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block h-full"
+                >
+                  <Card
+                    className={`group flex h-full flex-col transition-colors animate-fade-in stagger-${Math.min(
+                      index + 1,
+                      4,
+                    )} ${
+                      item.featured
+                        ? "border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                        : "border-border/70 bg-card hover:bg-accent/40"
+                    }`}
                   >
-                    <Card
-                      className={`group h-full border-border/70 bg-card transition-colors hover:bg-accent/40 animate-fade-in stagger-${Math.min(
-                        index + 2,
-                        4,
-                      )}`}
-                    >
-                      <CardHeader className="space-y-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                            <Icon className="h-5 w-5" />
-                          </div>
-                          <Badge variant={item.badgeVariant}>{item.badge}</Badge>
+                    <CardHeader className="flex-1 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <Icon className="h-5 w-5" />
                         </div>
-                        <div className="space-y-2">
-                          <CardTitle className="text-xl">{item.title}</CardTitle>
-                          <CardDescription className="text-sm leading-6">
-                            {item.description}
-                          </CardDescription>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="flex items-center justify-between gap-3">
-                        <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                          {t("relatedProjectTag")}
-                        </span>
-                        <div className="inline-flex items-center gap-2 text-sm font-medium text-primary">
-                          {t("openExternal")}
-                          <ExternalLink className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </a>
-                );
-              })}
-            </div>
+                        <Badge variant={item.badgeVariant}>{item.badge}</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <CardTitle className="text-xl">{item.title}</CardTitle>
+                        <CardDescription className="text-sm leading-6">
+                          {item.description}
+                        </CardDescription>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between gap-3">
+                      <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        {item.footerLabel ?? t("relatedProjectTag")}
+                      </span>
+                      <div className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+                        {item.actionLabel ?? t("openExternal")}
+                        <ExternalLink className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </a>
+              );
+            })}
           </div>
         </section>
       </div>

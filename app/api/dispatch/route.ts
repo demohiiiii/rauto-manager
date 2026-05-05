@@ -74,8 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "tx_block 类型必须提供非空 payload.commands、payload.template 或 payload.template_content",
+          error: "tx_block 类型必须提供命令、模板或命令流程模板输入",
         },
         { status: 400 },
       );

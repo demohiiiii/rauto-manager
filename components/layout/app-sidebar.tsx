@@ -7,6 +7,7 @@ import {
   Activity,
   ChevronLeft,
   ChevronRight,
+  FileCode,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -34,12 +35,38 @@ import { useTranslations } from "next-intl";
 
 const NAV_ITEMS = [
   { nameKey: "dashboard", href: "/", icon: LayoutDashboard, match: "exact" },
-  { nameKey: "agentManagement", href: "/agents", icon: Server, match: "prefix" },
-  { nameKey: "deviceManagement", href: "/devices", icon: Network, match: "prefix" },
+  {
+    nameKey: "agentManagement",
+    href: "/agents",
+    icon: Server,
+    match: "prefix",
+  },
+  {
+    nameKey: "deviceManagement",
+    href: "/devices",
+    icon: Network,
+    match: "prefix",
+  },
+  {
+    nameKey: "templateManagement",
+    href: "/templates",
+    icon: FileCode,
+    match: "prefix",
+  },
   { nameKey: "taskOrchestration", href: "/tasks", icon: Zap, match: "exact" },
-  { nameKey: "executionHistory", href: "/history", icon: Activity, match: "prefix" },
+  {
+    nameKey: "executionHistory",
+    href: "/history",
+    icon: Activity,
+    match: "prefix",
+  },
   { nameKey: "docCenter", href: "/docs", icon: FileText, match: "prefix" },
-  { nameKey: "systemSettings", href: "/settings", icon: Settings, match: "prefix" },
+  {
+    nameKey: "systemSettings",
+    href: "/settings",
+    icon: Settings,
+    match: "prefix",
+  },
 ] as const;
 
 type AppSidebarProps = {
@@ -74,26 +101,26 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
       <aside
         className={cn(
           "relative flex h-full shrink-0 flex-col overflow-visible border-r bg-card/60 backdrop-blur-sm transition-[width] duration-300 ease-in-out",
-          isCollapsed ? "w-[76px]" : "w-64"
+          isCollapsed ? "w-[76px]" : "w-64",
         )}
       >
         <div
           className={cn(
             "relative flex h-16 items-center border-b bg-card/80 px-3",
-            isCollapsed && "justify-center"
+            isCollapsed && "justify-center",
           )}
         >
           <div
             className={cn(
               "flex min-w-0 flex-1 items-center",
-              isCollapsed ? "justify-center" : "gap-3"
+              isCollapsed ? "justify-center" : "gap-3",
             )}
           >
             <Link
               href="/"
               className={cn(
                 "flex min-w-0 items-center hover:opacity-80 transition-opacity",
-                isCollapsed ? "justify-center" : "gap-3"
+                isCollapsed ? "justify-center" : "gap-3",
               )}
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
@@ -119,7 +146,8 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
               const isActive =
                 item.match === "exact"
                   ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  : pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
 
               const navItem = (
                 <Link
@@ -130,14 +158,14 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                     isActive
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                    isCollapsed && "justify-center px-2.5"
+                    isCollapsed && "justify-center px-2.5",
                   )}
                 >
                   <item.icon
                     className={cn(
                       "h-5 w-5 shrink-0 transition-transform",
                       isActive && "scale-110",
-                      isCollapsed && "h-5 w-5"
+                      isCollapsed && "h-5 w-5",
                     )}
                   />
                   {!isCollapsed && (
@@ -155,7 +183,9 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                 return (
                   <Tooltip key={item.nameKey}>
                     <TooltipTrigger asChild>{navItem}</TooltipTrigger>
-                    <TooltipContent side="right">{t(item.nameKey)}</TooltipContent>
+                    <TooltipContent side="right">
+                      {t(item.nameKey)}
+                    </TooltipContent>
                   </Tooltip>
                 );
               }
@@ -180,21 +210,28 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right">{t("expandSidebar")}</TooltipContent>
+                <TooltipContent side="right">
+                  {t("expandSidebar")}
+                </TooltipContent>
               </Tooltip>
             </div>
           </div>
         )}
 
         <div className="bg-card/80 p-3 pt-2">
-          <div className={cn("flex items-center gap-2", isCollapsed && "justify-center")}>
+          <div
+            className={cn(
+              "flex items-center gap-2",
+              isCollapsed && "justify-center",
+            )}
+          >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   className={cn(
                     "flex items-center gap-3 rounded-xl bg-secondary/60 px-3 py-2.5 text-left transition-colors hover:bg-secondary",
-                    isCollapsed ? "justify-center px-2.5" : "min-w-0 flex-1"
+                    isCollapsed ? "justify-center px-2.5" : "min-w-0 flex-1",
                   )}
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold shadow-sm">
@@ -202,8 +239,12 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                   </div>
                   {!isCollapsed && (
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">Admin</div>
-                      <div className="truncate text-xs text-muted-foreground">{tc("admin")}</div>
+                      <div className="truncate text-sm font-medium text-foreground">
+                        Admin
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {tc("admin")}
+                      </div>
                     </div>
                   )}
                 </button>
@@ -242,7 +283,9 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top">{t("collapseSidebar")}</TooltipContent>
+                <TooltipContent side="top">
+                  {t("collapseSidebar")}
+                </TooltipContent>
               </Tooltip>
             )}
           </div>

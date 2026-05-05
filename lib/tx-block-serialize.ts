@@ -13,6 +13,12 @@ function parseOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function parseRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function parseOptionalPositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value > 0
     ? value
@@ -37,6 +43,11 @@ function buildRunCommand(mode: string, command: string, timeout?: number) {
 export function hasTxBlockDispatchInput(
   payload: Record<string, unknown>,
 ): boolean {
+  const txBlock = parseRecord(payload.tx_block);
+  if (txBlock && Array.isArray(txBlock.steps) && txBlock.steps.length > 0) {
+    return true;
+  }
+
   if (parseCommands(payload.commands).length > 0) {
     return true;
   }
@@ -50,9 +61,14 @@ export function hasTxBlockDispatchInput(
 export function buildTxBlockJsonFromPayload(
   payload: Record<string, unknown>,
 ): string {
+  const existingTxBlock = parseRecord(payload.tx_block);
+  if (existingTxBlock) {
+    return JSON.stringify(existingTxBlock);
+  }
+
   if (!hasTxBlockDispatchInput(payload)) {
     throw new Error(
-      "tx_block payload must include non-empty commands, template, or template_content",
+      "tx_block payload must include non-empty tx_block, commands, template, or template_content",
     );
   }
 

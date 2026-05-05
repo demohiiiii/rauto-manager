@@ -106,6 +106,10 @@ function buildHttpAgentPayload(
       const txBlockJson = buildTxBlockJsonFromPayload(payload);
       const hasCommands =
         Array.isArray(payload.commands) && payload.commands.length > 0;
+      const hasStructuredTxBlock =
+        payload.tx_block &&
+        typeof payload.tx_block === "object" &&
+        !Array.isArray(payload.tx_block);
       const request: Record<string, unknown> = {
         ...base,
         tx_block: JSON.parse(txBlockJson) as unknown,
@@ -113,6 +117,7 @@ function buildHttpAgentPayload(
 
       if (
         !hasCommands &&
+        !hasStructuredTxBlock &&
         typeof payload.template === "string" &&
         payload.template.trim()
       ) {

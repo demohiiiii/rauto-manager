@@ -56,6 +56,37 @@ export interface AgentConnection {
   available_modes?: string[];
 }
 
+export type AgentTemplateKind =
+  | "template"
+  | "tx_block"
+  | "tx_workflow"
+  | "orchestrate";
+
+export interface AgentTemplateMeta {
+  name: string;
+  kind: string;
+  source: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface AgentTemplateDetail extends AgentTemplateMeta {
+  content: string;
+}
+
+export interface ManagerTemplate {
+  id: string;
+  kind: AgentTemplateKind;
+  name: string;
+  content: string;
+  sourceAgentId?: string | null;
+  sourceAgentName?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AgentCreateInput {
   name: string;
   host: string;
@@ -75,7 +106,7 @@ export interface Device {
   status: "reachable" | "unreachable" | "unknown";
   statusReason?: "agent_offline";
   lastChecked?: Date;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
   agent?: {
@@ -102,9 +133,9 @@ export interface Task {
   agentIds: string[];
   deviceIds?: string[];
   template: string;
-  variables: Record<string, any>;
+  variables: Record<string, unknown>;
   dispatchType: DispatchType;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: "pending" | "queued" | "running" | "success" | "failed" | "cancelled";
   result?: TaskResult;
   resultSummary?: string | null;
@@ -126,7 +157,7 @@ export interface TaskExecutionEvent {
   stage?: string | null;
   message: string;
   progress?: number | null;
-  details?: Record<string, any> | string | number | boolean | null;
+  details?: Record<string, unknown> | string | number | boolean | null;
   createdAt: Date;
 }
 
@@ -149,7 +180,7 @@ export interface TaskCreateInput {
   agentIds: string[];
   deviceIds?: string[];
   template: string;
-  variables?: Record<string, any>;
+  variables?: Record<string, unknown>;
 }
 
 export interface TaskDispatchResponse {

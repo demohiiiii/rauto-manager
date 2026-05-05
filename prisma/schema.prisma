@@ -151,6 +151,21 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
 }
 
+model ManagerTemplate {
+  id              String   @id @default(uuid())
+  kind            String
+  name            String
+  content         String   @db.Text
+  sourceAgentId   String?
+  sourceAgentName String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([kind, name])
+  @@index([kind])
+  @@index([updatedAt])
+}
+
 model AgentErrorReport {
   id         String   @id @default(uuid())
   eventId    String   @unique
